@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Phone, CheckCircle2, Sparkles, ArrowRight } from 'lucide-react';
+import { User, Phone, CheckCircle2, Sparkles, ArrowRight, Loader2 } from 'lucide-react';
 import { UI_LABELS } from '../constants';
+import { syncService } from '../services/syncService';
+import { supabase } from '../services/supabase';
 
 export const OnboardingPage: React.FC = () => {
   const [name, setName] = useState('');
@@ -12,37 +14,52 @@ export const OnboardingPage: React.FC = () => {
   const userEmail = localStorage.getItem('currentUserEmail') || '';
 
   useEffect(() => {
-    // If somehow landed here without email, go to login
     if (!userEmail) navigate('/login');
     
-    // If profile already complete, go to dashboard
-    const profileKey = `profile_${userEmail}`;
-    const profile = JSON.parse(localStorage.getItem(profileKey) || '{}');
-    if (profile.isProfileComplete) navigate('/');
+    const checkProfile = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const cloudData = await syncService.pullAllData(session.user.id);
+        if (cloudData?.profile?.isProfileComplete) {
+          await syncService.restoreToLocalStorage(userEmail, cloudData);
+          navigate('/');
+        }
+      }
+    };
+    checkProfile();
   }, [userEmail, navigate]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
-    const profileKey = `profile_${userEmail}`;
-    const profileData = {
-      name: name.trim(),
-      phone: phone.trim(),
-      email: userEmail,
-      currency: '৳',
-      isProfileComplete: true
-    };
-    
-    // Save to storage
-    localStorage.setItem(profileKey, JSON.stringify(profileData));
-    
-    // Add a slight delay for better UX
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("No session");
+
+      const profileData = {
+        name: name.trim(),
+        phone: phone.trim(),
+        email: userEmail,
+        currency: '৳',
+        isProfileComplete: true
+      };
+      
+      // Save locally
+      localStorage.setItem(`profile_${userEmail}`, JSON.stringify(profileData));
+      localStorage.setItem('userCurrency', '৳');
+      
+      // Save to Cloud
+      await syncService.upsertProfile(session.user.id, profileData);
+      
       window.dispatchEvent(new Event('storage'));
       navigate('/');
-    }, 1500);
+    } catch (err) {
+      console.error(err);
+      alert("তথ্য সেভ করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -96,7 +113,7 @@ export const OnboardingPage: React.FC = () => {
             >
               {isLoading ? (
                 <div className="flex items-center gap-3">
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  <Loader2 size={24} className="animate-spin" />
                   <span>সেভ হচ্ছে...</span>
                 </div>
               ) : (

@@ -16,7 +16,8 @@
     "@google/genai": "1.2.0",
     "recharts": "2.12.2",
     "jspdf": "2.5.1",
-    "html2canvas": "1.4.1"
+    "html2canvas": "1.4.1",
+    "@supabase/supabase-js": "2.39.7"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

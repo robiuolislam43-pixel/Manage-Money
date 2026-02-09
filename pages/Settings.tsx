@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Mail, Phone, Save, CheckCircle2, Camera, Trash2, ShieldCheck, Banknote, AlertTriangle, RotateCcw } from 'lucide-react';
+import { User, Mail, Phone, Save, CheckCircle2, Camera, Trash2, ShieldCheck, Banknote, AlertTriangle, RotateCcw, Download, Upload, FileJson } from 'lucide-react';
 import { UI_LABELS, SUPPORTED_CURRENCIES } from '../constants';
 
 export const SettingsPage: React.FC = () => {
@@ -15,6 +15,7 @@ export const SettingsPage: React.FC = () => {
   const [profilePic, setProfilePic] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const email = localStorage.getItem('currentUserEmail') || '';
@@ -34,8 +35,6 @@ export const SettingsPage: React.FC = () => {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     const profileKey = `profile_${userEmail}`;
-    
-    // Always ensure isProfileComplete is true when saving from settings
     const updatedProfile = { ...profile, isProfileComplete: true };
     localStorage.setItem(profileKey, JSON.stringify(updatedProfile));
     
@@ -50,24 +49,61 @@ export const SettingsPage: React.FC = () => {
     window.dispatchEvent(new Event('storage'));
   };
 
+  const handleExportData = () => {
+    const data = {
+      profile: JSON.parse(localStorage.getItem(`profile_${userEmail}`) || '{}'),
+      profilePic: localStorage.getItem(`profilePic_${userEmail}`),
+      transactions: JSON.parse(localStorage.getItem(`transactions_${userEmail}`) || '[]'),
+      loans: JSON.parse(localStorage.getItem(`loans_${userEmail}`) || '[]'),
+      wallets: JSON.parse(localStorage.getItem(`wallets_${userEmail}`) || '[]'),
+      exportDate: new Date().toISOString(),
+      email: userEmail
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `ManageMoney_Backup_${userEmail}_${new Date().toLocaleDateString()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportData = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        if (data.email && data.email !== userEmail) {
+          if (!window.confirm("এই ব্যাকআপ ফাইলটি অন্য একটি ইমেইলের। আপনি কি বর্তমান ইমেইলে এটি ইমপোর্ট করতে চান?")) return;
+        }
+
+        localStorage.setItem(`profile_${userEmail}`, JSON.stringify(data.profile));
+        if (data.profilePic) localStorage.setItem(`profilePic_${userEmail}`, data.profilePic);
+        localStorage.setItem(`transactions_${userEmail}`, JSON.stringify(data.transactions));
+        localStorage.setItem(`loans_${userEmail}`, JSON.stringify(data.loans));
+        localStorage.setItem(`wallets_${userEmail}`, JSON.stringify(data.wallets));
+
+        alert("সফলভাবে ডেটা রিস্টোর করা হয়েছে!");
+        window.location.reload();
+      } catch (err) {
+        alert("ভুল ব্যাকআপ ফাইল! দয়া করে সঠিক ফাইল নির্বাচন করুন।");
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handleResetData = () => {
-    const isConfirmed = window.confirm("আপনি কি নিশ্চিত? এটি আপনার আয়, ব্যয় এবং লোনের সকল হিসেব মুছে ০ করে ফেলবে।");
+    const isConfirmed = window.confirm("আপনি কি নিশ্চিত? এটি আপনার সকল হিসেব মুছে ফেলবে। ব্যাকআপ না থাকলে আর ফিরে পাবেন না।");
     if (isConfirmed) {
       localStorage.removeItem(`transactions_${userEmail}`);
       localStorage.removeItem(`loans_${userEmail}`);
       localStorage.removeItem(`wallets_${userEmail}`);
-      
       alert("সফলভাবে সব হিসাব পরিষ্কার করা হয়েছে।");
       window.location.reload();
-    }
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setProfilePic(reader.result as string);
-      reader.readAsDataURL(file);
     }
   };
 
@@ -75,7 +111,7 @@ export const SettingsPage: React.FC = () => {
     <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in pb-20">
       <div className="flex flex-col gap-1">
         <h1 className="text-3xl font-black text-slate-900 tracking-tight">{UI_LABELS.SETTINGS}</h1>
-        <p className="text-slate-500 font-medium">আপনার প্রোফাইল এবং ব্যক্তিগত তথ্য ম্যানেজ করুন।</p>
+        <p className="text-slate-500 font-medium">আপনার প্রোফাইল এবং ডেটা ব্যাকআপ ম্যানেজ করুন।</p>
       </div>
 
       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
@@ -95,7 +131,14 @@ export const SettingsPage: React.FC = () => {
                 </button>
               </div>
             </div>
-            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                const reader = new FileReader();
+                reader.onloadend = () => setProfilePic(reader.result as string);
+                reader.readAsDataURL(file);
+              }
+            }} />
           </div>
 
           <div className="grid grid-cols-1 gap-6">
@@ -108,17 +151,11 @@ export const SettingsPage: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700 ml-1">ইমেইল এড্রেস (অ্যাকাউন্ট ইমেইল)</label>
+              <label className="text-sm font-bold text-slate-700 ml-1">ইমেইল এড্রেস</label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                <input 
-                  type="email" 
-                  readOnly
-                  className="w-full pl-12 pr-5 py-4 bg-slate-100 border border-slate-200 rounded-2xl outline-none text-slate-400 cursor-not-allowed font-medium" 
-                  value={userEmail} 
-                />
+                <input type="email" readOnly className="w-full pl-12 pr-5 py-4 bg-slate-100 border border-slate-200 rounded-2xl outline-none text-slate-400 cursor-not-allowed font-medium" value={userEmail} />
               </div>
-              <p className="text-[10px] text-slate-400 font-bold ml-1 italic">* এটি পরিবর্তনযোগ্য নয় এবং সকল তথ্য এই ইমেইলে সংরক্ষিত।</p>
             </div>
 
             <div className="space-y-2">
@@ -126,19 +163,6 @@ export const SettingsPage: React.FC = () => {
               <div className="relative">
                 <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input type="tel" className="w-full pl-12 pr-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all font-bold" value={profile.phone} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} placeholder="০১XXXXXXXXX" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700 ml-1">কারেন্সি</label>
-              <div className="relative">
-                <Banknote className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <select className="w-full pl-12 pr-10 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold focus:ring-2 focus:ring-indigo-500 transition-all appearance-none" value={profile.currency} onChange={(e) => setProfile({ ...profile, currency: e.target.value })}>
-                  {SUPPORTED_CURRENCIES.map(curr => <option key={curr.code} value={curr.symbol}>{curr.label} ({curr.symbol})</option>)}
-                </select>
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                  <RotateCcw size={14} className="rotate-90" />
-                </div>
               </div>
             </div>
           </div>
@@ -149,9 +173,30 @@ export const SettingsPage: React.FC = () => {
         </form>
       </div>
 
+      {/* Data Management Section */}
+      <div className="bg-indigo-50/50 p-8 rounded-[2.5rem] border border-indigo-100 space-y-6">
+        <div className="flex items-center gap-3 text-indigo-900">
+          <FileJson size={24} />
+          <h2 className="text-xl font-black uppercase tracking-tight">ডেটা ব্যাকআপ ও রিস্টোর</h2>
+        </div>
+        <p className="text-sm text-slate-600 font-medium leading-relaxed">
+          আপনার ব্রাউজার ডেটা মুছে ফেললে বা ফোন পরিবর্তন করলে সকল তথ্য হারিয়ে যেতে পারে। নিরাপদ থাকতে আপনার ডেটা ব্যাকআপ নিয়ে রাখুন।
+        </p>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <button onClick={handleExportData} className="flex items-center justify-center gap-2 bg-white border border-indigo-200 text-indigo-600 font-bold py-4 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all">
+            <Download size={20} /> ব্যাকআপ ডাউনলোড
+          </button>
+          
+          <button onClick={() => importFileRef.current?.click()} className="flex items-center justify-center gap-2 bg-indigo-600 text-white font-bold py-4 rounded-2xl hover:bg-indigo-700 transition-all">
+            <Upload size={20} /> ব্যাকআপ রিস্টোর
+          </button>
+          <input type="file" ref={importFileRef} className="hidden" accept=".json" onChange={handleImportData} />
+        </div>
+      </div>
+
       <div className="bg-rose-50 p-8 rounded-[2.5rem] border border-rose-100 space-y-6">
         <div className="flex items-center gap-3 text-rose-600"><AlertTriangle size={24} /><h2 className="text-xl font-black uppercase tracking-tight">ডেঞ্জার জোন</h2></div>
-        <p className="text-sm text-rose-600/70 font-bold ml-1 leading-relaxed">সাবধান! নিচের বাটনে ক্লিক করলে এই ইমেইলে থাকা সকল জমানো হিসাব পাকাপাকিভাবে মুছে যাবে।</p>
         <button onClick={handleResetData} className="w-full bg-white border-2 border-rose-200 text-rose-600 font-black py-4 rounded-2xl hover:bg-rose-600 hover:text-white transition-all flex items-center justify-center gap-3">
           <RotateCcw size={20} /> সব ডেটা মুছুন
         </button>
