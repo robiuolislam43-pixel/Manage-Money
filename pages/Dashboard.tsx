@@ -34,6 +34,7 @@ export const Dashboard: React.FC = () => {
   // Refs to prevent flickering and redundant calls
   const lastAnalyzedHash = useRef<string>('');
   const aiTimeoutRef = useRef<number | null>(null);
+  const isRequestInProgress = useRef<boolean>(false);
 
   const loadLocalData = useCallback(() => {
     const userEmail = localStorage.getItem('currentUserEmail') || '';
@@ -74,19 +75,26 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   const triggerAI = useCallback(async (txs: Transaction[], lnList: Loan[]) => {
-    const hash = `${txs.length}-${lnList.length}-${txs.reduce((s, t) => s + (Number(t.amount) || 0), 0)}`;
-    if (hash === lastAnalyzedHash.current) return;
+    // Generate a robust hash of current financial state
+    const currentHash = `${txs.length}-${lnList.length}-${txs.reduce((s, t) => s + (Number(t.amount) || 0), 0)}`;
+    
+    // Stop if data hasn't changed or a request is already running
+    if (currentHash === lastAnalyzedHash.current || isRequestInProgress.current) return;
 
+    isRequestInProgress.current = true;
     setIsLoadingAI(true);
     setAiError(null);
+    
     try {
       const insight = await getFinancialInsights(txs, lnList);
       setAiInsight(insight);
-      lastAnalyzedHash.current = hash;
+      lastAnalyzedHash.current = currentHash; // Update hash ONLY after success
     } catch (error) {
-      setAiError("পরামর্শ লোড করতে সমস্যা হয়েছে। দয়া করে কিছুক্ষণ পর আবার চেষ্টা করুন।");
+      console.error("AI Analysis Error:", error);
+      setAiError("আপনার তথ্য বিশ্লেষণে সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।");
     } finally {
       setIsLoadingAI(false);
+      isRequestInProgress.current = false;
     }
   }, []);
 
@@ -97,13 +105,13 @@ export const Dashboard: React.FC = () => {
     return () => window.removeEventListener('storage', handleStorage);
   }, [loadLocalData]);
 
-  // Debounced AI call to prevent suggestions from changing constantly
+  // Use a stable debounce to prevent suggestions from flickering
   useEffect(() => {
     if (transactions.length > 0 || loans.length > 0) {
       if (aiTimeoutRef.current) window.clearTimeout(aiTimeoutRef.current);
       aiTimeoutRef.current = window.setTimeout(() => {
         triggerAI(transactions, loans);
-      }, 1500); // Wait for 1.5s after data settles
+      }, 2000); // 2 second delay to ensure data has settled
     } else {
       setAiInsight({ text: "স্বাগতম! আপনার হিসাব যোগ করা শুরু করুন, আমি চমৎকার সব পরামর্শ দেব।", sources: [] });
     }
@@ -171,33 +179,32 @@ export const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
           <h3 className="text-xl font-black text-slate-800 mb-8">আয় এবং ব্যয়ের তুলনা</h3>
-          <div className="h-[350px] w-full relative">
+          {/* Added a fixed height container with a key to force stability */}
+          <div className="w-full" style={{ height: '380px' }}>
             {transactions.length > 0 ? (
-              <div className="w-full h-full min-h-[350px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart 
-                    data={chartData} 
-                    key={`bar-chart-${transactions.length}-${totalIncome}-${totalExpense}`}
-                    margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 14, fill: '#64748b', fontWeight: 'bold' }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b', fontWeight: 'bold' }} />
-                    <Tooltip cursor={{ fill: '#f8fafc' }} />
-                    <Bar dataKey="value" radius={[12, 12, 0, 0]} barSize={80} isAnimationActive={false}>
-                      {chartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <ResponsiveContainer width="100%" height="100%" debounce={100}>
+                <BarChart 
+                  data={chartData} 
+                  key={`chart-${transactions.length}-${totalIncome}-${totalExpense}`}
+                  margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 14, fill: '#64748b', fontWeight: 'bold' }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b', fontWeight: 'bold' }} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Bar dataKey="value" radius={[12, 12, 0, 0]} barSize={80} isAnimationActive={true}>
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             ) : (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-10">
-                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 text-slate-300">
+              <div className="w-full h-full flex flex-col items-center justify-center text-center p-10 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-4 text-slate-300 shadow-sm">
                   <TrendingUp size={32} />
                 </div>
-                <p className="text-slate-400 font-bold italic">চার্ট দেখানোর জন্য পর্যাপ্ত তথ্য নেই। নতুন লেনদেন যোগ করুন।</p>
+                <p className="text-slate-400 font-bold italic">চার্ট দেখানোর জন্য পর্যাপ্ত তথ্য নেই। লেনদেন যোগ করুন।</p>
               </div>
             )}
           </div>
@@ -256,11 +263,11 @@ export const Dashboard: React.FC = () => {
             )}
           </div>
           
-          <div className="bg-slate-50/50 rounded-3xl border border-slate-100 p-8 min-h-[150px]">
+          <div className="bg-slate-50/50 rounded-3xl border border-slate-100 p-8 min-h-[180px]">
             {isLoadingAI ? (
                <div className="flex flex-col items-center py-10 gap-4">
                   <Loader2 className="animate-spin text-indigo-600" size={32} />
-                  <p className="text-slate-500 font-bold animate-pulse text-sm">আপনার জন্য চমৎকার পরামর্শ তৈরি করছি...</p>
+                  <p className="text-slate-500 font-bold animate-pulse text-sm">আপনার জন্য সুনির্দিষ্ট এবং স্মার্ট পরামর্শ তৈরি করছি...</p>
                </div>
             ) : aiError ? (
               <div className="flex flex-col items-center py-8 text-center gap-4">
@@ -274,7 +281,7 @@ export const Dashboard: React.FC = () => {
                  </button>
               </div>
             ) : (
-              <>
+              <div className="animate-in fade-in slide-in-from-bottom-2 duration-700">
                 <p className="whitespace-pre-line text-slate-700 font-medium leading-loose text-lg">
                   {aiInsight?.text || "আপনার লেনদেন পর্যবেক্ষণ করা হচ্ছে..."}
                 </p>
@@ -297,7 +304,7 @@ export const Dashboard: React.FC = () => {
                     </div>
                   </div>
                 )}
-              </>
+              </div>
             )}
           </div>
         </div>
