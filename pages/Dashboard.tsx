@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { StatCard } from '../components/StatCard';
 import { UI_LABELS } from '../constants';
 import { 
@@ -18,13 +18,10 @@ export const Dashboard: React.FC = () => {
   const [profilePic, setProfilePic] = useState<string | null>(null);
   const [userName, setUserName] = useState('ইউজার');
   const [currency, setCurrency] = useState('৳');
-  const [isSynced, setIsSynced] = useState(true);
   
   const [showTypeSelector, setShowTypeSelector] = useState(false);
   const [activeFormType, setActiveFormType] = useState<TransactionType | null>(null);
   const [showWalletModal, setShowWalletModal] = useState(false);
-  const [editingWalletId, setEditingWalletId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState('');
 
   const [aiInsight, setAiInsight] = useState<AIInsight | null>(null);
   const [isLoadingAI, setIsLoadingAI] = useState(false);
@@ -33,7 +30,6 @@ export const Dashboard: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
-  const [dueToday, setDueToday] = useState<Loan[]>([]);
 
   const loadLocalData = useCallback(() => {
     const userEmail = localStorage.getItem('currentUserEmail') || '';
@@ -70,8 +66,6 @@ export const Dashboard: React.FC = () => {
     ];
     setWallets(walletList);
 
-    // Auto-Sync trigger
-    // FIX: Using the newly added syncAllData method in syncService
     syncService.syncAllData(userEmail, { transactions: txs, loans: lnList, wallets: walletList });
     
     return { txs, lnList, walletList };
@@ -104,15 +98,16 @@ export const Dashboard: React.FC = () => {
     return () => window.removeEventListener('storage', handleStorage);
   }, [loadLocalData, fetchAIAdvice]);
 
-  const totalIncome = transactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + t.amount, 0);
-  const totalExpense = transactions.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + t.amount, 0);
+  const totalIncome = transactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + Number(t.amount), 0);
+  const totalExpense = transactions.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + Number(t.amount), 0);
   const mainBalance = totalIncome - totalExpense;
   const totalWalletBalance = wallets.reduce((sum, w) => sum + w.balance, 0);
 
-  const chartData = [
+  // Memoize chart data for better performance
+  const chartData = useMemo(() => [
     { name: UI_LABELS.INCOME, value: totalIncome, color: '#10b981' },
     { name: UI_LABELS.EXPENSE, value: totalExpense, color: '#f43f5e' },
-  ];
+  ], [totalIncome, totalExpense]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
@@ -155,27 +150,33 @@ export const Dashboard: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
+        <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm min-h-[400px]">
           <h3 className="text-xl font-black text-slate-800 mb-8">আয় এবং ব্যয়ের তুলনা</h3>
-          <div className="h-[300px] w-full">
+          <div className="h-[300px] w-full relative">
+            {/* Added key to force re-render when data changes, and isAnimationActive={false} for instant feedback */}
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
+              <BarChart data={chartData} key={`chart-${transactions.length}`}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 14, fill: '#64748b', fontWeight: 'bold' }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b', fontWeight: 'bold' }} />
                 <Tooltip cursor={{ fill: '#f8fafc' }} />
-                <Bar dataKey="value" radius={[12, 12, 0, 0]} barSize={80}>
+                <Bar dataKey="value" radius={[12, 12, 0, 0]} barSize={80} isAnimationActive={false}>
                   {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+            {transactions.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-[1px]">
+                <p className="text-slate-400 font-bold italic">চার্ট দেখানোর জন্য পর্যাপ্ত তথ্য নেই</p>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden h-fit">
           <div className="p-6 border-b border-slate-50"><h3 className="font-black text-lg text-slate-800">সাম্প্রতিক লেনদেন</h3></div>
           <div className="divide-y divide-slate-50">
-            {transactions.slice(0, 5).map((t) => (
+            {transactions.length > 0 ? transactions.slice(0, 5).map((t) => (
               <div key={t.id} className="p-4 flex items-center justify-between hover:bg-slate-50/50 transition-colors">
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${t.type === 'INCOME' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
@@ -190,7 +191,9 @@ export const Dashboard: React.FC = () => {
                   {t.type === 'INCOME' ? '+' : '-'} {currency} {t.amount.toLocaleString('bn-BD')}
                 </p>
               </div>
-            ))}
+            )) : (
+              <div className="p-10 text-center text-slate-300 font-bold text-xs uppercase tracking-widest">কোনো লেনদেন নেই</div>
+            )}
           </div>
         </div>
       </div>
@@ -200,7 +203,7 @@ export const Dashboard: React.FC = () => {
         <div className="relative bg-white/80 backdrop-blur-md p-8 rounded-[2.5rem] border border-white shadow-2xl">
           <div className="flex items-center gap-5 mb-8">
             <div className={`w-16 h-16 rounded-[1.25rem] flex items-center justify-center text-white bg-gradient-to-tr from-indigo-600 to-violet-600 shadow-xl`}>
-              <Sparkles size={32} />
+              <BrainCircuit size={32} />
             </div>
             <div>
               <h2 className="text-2xl font-black text-slate-900">স্মার্ট এআই এসিস্ট্যান্ট</h2>
@@ -211,28 +214,36 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
           <div className="bg-slate-50/50 rounded-3xl border border-slate-100 p-8">
-            <p className="whitespace-pre-line text-slate-700 font-medium leading-loose text-lg">
-              {aiInsight?.text || "আপনার লেনদেন পর্যবেক্ষণ করা হচ্ছে..."}
-            </p>
-            {/* Display AI sources for transparency and verification, required for Search Grounding */}
-            {aiInsight?.sources && aiInsight.sources.length > 0 && (
-              <div className="mt-6 pt-6 border-t border-slate-200/50">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">তথ্যসূত্র ও বিস্তারিত:</p>
-                <div className="flex flex-wrap gap-2">
-                  {aiInsight.sources.map((source, idx) => (
-                    <a 
-                      key={idx} 
-                      href={source.uri} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-100 rounded-xl text-xs font-bold text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm group/link"
-                    >
-                      <ExternalLink size={12} className="group-hover/link:scale-110 transition-transform" />
-                      <span className="truncate max-w-[150px]">{source.title}</span>
-                    </a>
-                  ))}
-                </div>
-              </div>
+            {isLoadingAI ? (
+               <div className="flex flex-col items-center py-10 gap-4">
+                  <Loader2 className="animate-spin text-indigo-600" size={32} />
+                  <p className="text-slate-500 font-bold animate-pulse text-sm">আপনার জন্য চমৎকার পরামর্শ তৈরি করছি...</p>
+               </div>
+            ) : (
+              <>
+                <p className="whitespace-pre-line text-slate-700 font-medium leading-loose text-lg">
+                  {aiInsight?.text || "আপনার লেনদেন পর্যবেক্ষণ করা হচ্ছে..."}
+                </p>
+                {aiInsight?.sources && aiInsight.sources.length > 0 && (
+                  <div className="mt-6 pt-6 border-t border-slate-200/50">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">তথ্যসূত্র ও বিস্তারিত:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {aiInsight.sources.map((source, idx) => (
+                        <a 
+                          key={idx} 
+                          href={source.uri} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-100 rounded-xl text-xs font-bold text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm group/link"
+                        >
+                          <ExternalLink size={12} className="group-hover/link:scale-110 transition-transform" />
+                          <span className="truncate max-w-[150px]">{source.title}</span>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
