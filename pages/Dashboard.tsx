@@ -1,12 +1,12 @@
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { StatCard } from '../components/StatCard';
 import { UI_LABELS } from '../constants';
 import { 
   TrendingUp, TrendingDown, Wallet as WalletIcon, Plus, User, X, 
   ArrowUpRight, ArrowDownLeft, Smartphone, ChevronRight, Edit3, 
   Save, Sparkles, Loader2, RefreshCw, BrainCircuit,
-  Bell, Phone, CheckCircle2, ExternalLink, CloudCheck
+  Bell, Phone, CheckCircle2, ExternalLink, AlertCircle
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Transaction, Loan, TransactionType, Wallet, AIInsight } from '../types';
@@ -31,9 +31,13 @@ export const Dashboard: React.FC = () => {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
 
+  // Refs to prevent flickering and redundant calls
+  const lastAnalyzedHash = useRef<string>('');
+  const aiTimeoutRef = useRef<number | null>(null);
+
   const loadLocalData = useCallback(() => {
     const userEmail = localStorage.getItem('currentUserEmail') || '';
-    if (!userEmail) return { txs: [], lnList: [], walletList: [] };
+    if (!userEmail) return;
 
     const profileKey = `profile_${userEmail}`;
     const savedProfile = localStorage.getItem(profileKey);
@@ -67,43 +71,58 @@ export const Dashboard: React.FC = () => {
     setWallets(walletList);
 
     syncService.syncAllData(userEmail, { transactions: txs, loans: lnList, wallets: walletList });
-    
-    return { txs, lnList, walletList };
   }, []);
 
-  const fetchAIAdvice = useCallback(async (currentTxs: Transaction[], currentLoans: Loan[]) => {
-    if (isLoadingAI) return;
+  const triggerAI = useCallback(async (txs: Transaction[], lnList: Loan[]) => {
+    const hash = `${txs.length}-${lnList.length}-${txs.reduce((s, t) => s + (Number(t.amount) || 0), 0)}`;
+    if (hash === lastAnalyzedHash.current) return;
+
     setIsLoadingAI(true);
     setAiError(null);
     try {
-      const insight = await getFinancialInsights(currentTxs, currentLoans);
+      const insight = await getFinancialInsights(txs, lnList);
       setAiInsight(insight);
-    } catch (error: any) {
-      setAiError("পরামর্শ লোড করা সম্ভব হয়নি।");
+      lastAnalyzedHash.current = hash;
+    } catch (error) {
+      setAiError("পরামর্শ লোড করতে সমস্যা হয়েছে। দয়া করে কিছুক্ষণ পর আবার চেষ্টা করুন।");
     } finally {
       setIsLoadingAI(false);
     }
-  }, [isLoadingAI]);
+  }, []);
 
   useEffect(() => {
-    const { txs, lnList } = loadLocalData();
-    if (txs.length > 0 || lnList.length > 0) {
-      fetchAIAdvice(txs, lnList);
-    } else {
-      setAiInsight({ text: "স্বাগতম! আপনার হিসাব যোগ করা শুরু করুন, আমি চমৎকার সব পরামর্শ দেব।", sources: [] });
-    }
-
+    loadLocalData();
     const handleStorage = () => loadLocalData();
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
-  }, [loadLocalData, fetchAIAdvice]);
+  }, [loadLocalData]);
 
-  const totalIncome = transactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + Number(t.amount), 0);
-  const totalExpense = transactions.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + Number(t.amount), 0);
+  // Debounced AI call to prevent suggestions from changing constantly
+  useEffect(() => {
+    if (transactions.length > 0 || loans.length > 0) {
+      if (aiTimeoutRef.current) window.clearTimeout(aiTimeoutRef.current);
+      aiTimeoutRef.current = window.setTimeout(() => {
+        triggerAI(transactions, loans);
+      }, 1500); // Wait for 1.5s after data settles
+    } else {
+      setAiInsight({ text: "স্বাগতম! আপনার হিসাব যোগ করা শুরু করুন, আমি চমৎকার সব পরামর্শ দেব।", sources: [] });
+    }
+    return () => {
+      if (aiTimeoutRef.current) window.clearTimeout(aiTimeoutRef.current);
+    };
+  }, [transactions, loans, triggerAI]);
+
+  const totalIncome = transactions
+    .filter(t => t.type === 'INCOME')
+    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    
+  const totalExpense = transactions
+    .filter(t => t.type === 'EXPENSE')
+    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    
   const mainBalance = totalIncome - totalExpense;
-  const totalWalletBalance = wallets.reduce((sum, w) => sum + w.balance, 0);
+  const totalWalletBalance = wallets.reduce((sum, w) => sum + (Number(w.balance) || 0), 0);
 
-  // Memoize chart data for better performance
   const chartData = useMemo(() => [
     { name: UI_LABELS.INCOME, value: totalIncome, color: '#10b981' },
     { name: UI_LABELS.EXPENSE, value: totalExpense, color: '#f43f5e' },
@@ -135,7 +154,7 @@ export const Dashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard label={UI_LABELS.BALANCE} value={`${currency} ${mainBalance.toLocaleString('bn-BD')}`} trend="মোট সঞ্চয়" trendType={mainBalance >= 0 ? 'up' : 'down'} icon={<WalletIcon className="text-indigo-600" />} colorClass="bg-indigo-50" />
-        <div onClick={() => setShowWalletModal(true)} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group active:scale-95">
+        <div onClick={() => setShowWalletModal(true)} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer group active:scale-95">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-medium text-slate-500 mb-1">মোবাইল ব্যাংকিং</p>
@@ -150,24 +169,35 @@ export const Dashboard: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm min-h-[400px]">
+        <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
           <h3 className="text-xl font-black text-slate-800 mb-8">আয় এবং ব্যয়ের তুলনা</h3>
-          <div className="h-[300px] w-full relative">
-            {/* Added key to force re-render when data changes, and isAnimationActive={false} for instant feedback */}
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} key={`chart-${transactions.length}`}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 14, fill: '#64748b', fontWeight: 'bold' }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b', fontWeight: 'bold' }} />
-                <Tooltip cursor={{ fill: '#f8fafc' }} />
-                <Bar dataKey="value" radius={[12, 12, 0, 0]} barSize={80} isAnimationActive={false}>
-                  {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-            {transactions.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-[1px]">
-                <p className="text-slate-400 font-bold italic">চার্ট দেখানোর জন্য পর্যাপ্ত তথ্য নেই</p>
+          <div className="h-[350px] w-full relative">
+            {transactions.length > 0 ? (
+              <div className="w-full h-full min-h-[350px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart 
+                    data={chartData} 
+                    key={`bar-chart-${transactions.length}-${totalIncome}-${totalExpense}`}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 14, fill: '#64748b', fontWeight: 'bold' }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b', fontWeight: 'bold' }} />
+                    <Tooltip cursor={{ fill: '#f8fafc' }} />
+                    <Bar dataKey="value" radius={[12, 12, 0, 0]} barSize={80} isAnimationActive={false}>
+                      {chartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-10">
+                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 text-slate-300">
+                  <TrendingUp size={32} />
+                </div>
+                <p className="text-slate-400 font-bold italic">চার্ট দেখানোর জন্য পর্যাপ্ত তথ্য নেই। নতুন লেনদেন যোগ করুন।</p>
               </div>
             )}
           </div>
@@ -188,7 +218,7 @@ export const Dashboard: React.FC = () => {
                   </div>
                 </div>
                 <p className={`font-black text-sm ${t.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  {t.type === 'INCOME' ? '+' : '-'} {currency} {t.amount.toLocaleString('bn-BD')}
+                  {t.type === 'INCOME' ? '+' : '-'} {currency} {(Number(t.amount) || 0).toLocaleString('bn-BD')}
                 </p>
               </div>
             )) : (
@@ -208,17 +238,41 @@ export const Dashboard: React.FC = () => {
             <div>
               <h2 className="text-2xl font-black text-slate-900">স্মার্ট এআই এসিস্ট্যান্ট</h2>
               <p className="text-slate-400 font-bold text-[11px] uppercase tracking-widest mt-2 flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                ডেটা অ্যানালাইসিস কমপ্লিট
+                <span className={`w-2.5 h-2.5 rounded-full ${isLoadingAI ? 'bg-amber-500' : 'bg-emerald-500'} animate-pulse`}></span>
+                {isLoadingAI ? 'অ্যানালাইসিস চলছে...' : 'ডেটা অ্যানালাইসিস কমপ্লিট'}
               </p>
             </div>
+            {!isLoadingAI && (
+              <button 
+                onClick={() => {
+                  lastAnalyzedHash.current = '';
+                  triggerAI(transactions, loans);
+                }} 
+                className="ml-auto p-3 text-indigo-600 hover:bg-indigo-50 rounded-2xl transition-all"
+                title="রিফ্রেশ পরামর্শ"
+              >
+                <RefreshCw size={20} />
+              </button>
+            )}
           </div>
-          <div className="bg-slate-50/50 rounded-3xl border border-slate-100 p-8">
+          
+          <div className="bg-slate-50/50 rounded-3xl border border-slate-100 p-8 min-h-[150px]">
             {isLoadingAI ? (
                <div className="flex flex-col items-center py-10 gap-4">
                   <Loader2 className="animate-spin text-indigo-600" size={32} />
                   <p className="text-slate-500 font-bold animate-pulse text-sm">আপনার জন্য চমৎকার পরামর্শ তৈরি করছি...</p>
                </div>
+            ) : aiError ? (
+              <div className="flex flex-col items-center py-8 text-center gap-4">
+                 <AlertCircle className="text-rose-500" size={32} />
+                 <p className="text-slate-600 font-bold max-w-sm">{aiError}</p>
+                 <button 
+                   onClick={() => triggerAI(transactions, loans)}
+                   className="mt-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all"
+                 >
+                   আবার চেষ্টা করুন
+                 </button>
+              </div>
             ) : (
               <>
                 <p className="whitespace-pre-line text-slate-700 font-medium leading-loose text-lg">
@@ -268,7 +322,7 @@ export const Dashboard: React.FC = () => {
       )}
 
       {activeFormType && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
           <TransactionForm type={activeFormType} onSubmit={(newTx) => {
               const userEmail = localStorage.getItem('currentUserEmail') || '';
               const savedTxs = localStorage.getItem(`transactions_${userEmail}`);
