@@ -46,10 +46,13 @@ export const TransfersPage: React.FC = () => {
       const saved = localStorage.getItem(txKey);
       const currentTxs: Transaction[] = saved ? JSON.parse(saved) : [];
       
+      // Update local storage first
       const updated = currentTxs.filter(t => t.id !== id);
       localStorage.setItem(txKey, JSON.stringify(updated));
       
-      setTransactions(updated);
+      // Instantly update state to remove from UI
+      setTransactions(prev => prev.filter(t => t.id !== id));
+      
       setEditingTx(undefined);
       setActiveFormType(null);
       setShowTypeSelector(false);
@@ -91,25 +94,35 @@ export const TransfersPage: React.FC = () => {
     
     try {
       const element = statementRef.current;
+      
+      // Temporarily remove constraints for full-height rendering
+      const originalStyle = element.style.cssText;
+      element.style.height = 'auto';
+      element.style.position = 'relative';
+      element.style.left = '0';
+      element.style.opacity = '1';
+
       const canvas = await html2canvas(element, {
-        scale: 3, 
+        scale: 2, // Sufficient quality
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
-        width: element.offsetWidth,
-        height: element.scrollHeight,
+        scrollY: -window.scrollY,
         windowHeight: element.scrollHeight,
-        y: 0,
-        scrollX: 0,
-        scrollY: 0
       });
       
-      const imgData = canvas.toDataURL('image/png', 1.0);
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      // Restore original hidden style
+      element.style.cssText = originalStyle;
       
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
+      const imgData = canvas.toDataURL('image/png', 1.0);
+      
+      // Calculate dynamic PDF height to fit all content on 1 page
+      const imgWidth = 210; // A4 Width in mm
+      const pageHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      // Create PDF with custom height (imgWidth x pageHeight) to ensure "1 page"
+      const pdf = new jsPDF('p', 'mm', [imgWidth, pageHeight]);
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, pageHeight, undefined, 'FAST');
       pdf.save(`MM_Statement_${new Date().getTime()}.pdf`);
     } catch (error) {
       console.error("PDF generation failed:", error);
@@ -143,7 +156,7 @@ export const TransfersPage: React.FC = () => {
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
             {isDownloading ? <Loader2 size={24} className="animate-spin" /> : <DownloadCloud size={24} />}
-            <span className="relative">প্রিমিয়াম রিপোর্ট</span>
+            <span className="relative">প্রিমিয়াম রিপোর্ট (১ পেইজ)</span>
           </button>
           <button 
             onClick={() => { setEditingTx(undefined); setShowTypeSelector(true); }} 
@@ -246,7 +259,7 @@ export const TransfersPage: React.FC = () => {
         </div>
       </div>
 
-      <div style={{ position: 'fixed', top: 0, left: '-100vw', width: '210mm', opacity: 0, pointerEvents: 'none', zIndex: -1000 }}>
+      <div style={{ position: 'fixed', top: 0, left: '-200vw', width: '210mm', opacity: 0, pointerEvents: 'none', zIndex: -1000 }}>
         <div ref={statementRef} className="bg-white p-20 text-slate-900 relative" style={{ fontFamily: "'Hind Siliguri', sans-serif", width: '210mm' }}>
           <div className="absolute top-0 left-0 w-full h-8 bg-gradient-to-r from-indigo-950 via-indigo-800 to-indigo-900"></div>
           <div className="absolute top-8 left-0 w-full h-1 bg-amber-400"></div>

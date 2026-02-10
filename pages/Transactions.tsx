@@ -65,18 +65,17 @@ export const TransactionsPage: React.FC<TransactionsPageProps> = ({ type }) => {
       const userEmail = localStorage.getItem('currentUserEmail') || '';
       const txKey = `transactions_${userEmail}`;
       
-      // Fetch fresh data from storage to avoid stale state issues
       const saved = localStorage.getItem(txKey);
       const currentTxs: Transaction[] = saved ? JSON.parse(saved) : [];
       
       const updated = currentTxs.filter(t => t.id !== id);
       localStorage.setItem(txKey, JSON.stringify(updated));
       
-      setTransactions(updated);
+      // Instantly update the list in state
+      setTransactions(prev => prev.filter(t => t.id !== id));
+      
       setShowForm(false);
       setEditingTx(undefined);
-      
-      // Notify other parts of the app to refresh balance/UI
       window.dispatchEvent(new Event('storage'));
     }
   };
