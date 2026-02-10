@@ -61,12 +61,22 @@ export const TransactionsPage: React.FC<TransactionsPageProps> = ({ type }) => {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('আপনি কি এই লেনদেনটি মুছে ফেলতে চান?')) {
+    if (window.confirm('আপনি কি এই লেনদেনটি নিশ্চিতভাবে মুছে ফেলতে চান?')) {
       const userEmail = localStorage.getItem('currentUserEmail') || '';
       const txKey = `transactions_${userEmail}`;
-      const updated = transactions.filter(t => t.id !== id);
+      
+      // Fetch fresh data from storage to avoid stale state issues
+      const saved = localStorage.getItem(txKey);
+      const currentTxs: Transaction[] = saved ? JSON.parse(saved) : [];
+      
+      const updated = currentTxs.filter(t => t.id !== id);
       localStorage.setItem(txKey, JSON.stringify(updated));
+      
       setTransactions(updated);
+      setShowForm(false);
+      setEditingTx(undefined);
+      
+      // Notify other parts of the app to refresh balance/UI
       window.dispatchEvent(new Event('storage'));
     }
   };
@@ -89,7 +99,6 @@ export const TransactionsPage: React.FC<TransactionsPageProps> = ({ type }) => {
         </button>
       </div>
 
-      {/* Table and list implementation remains similar, using the scoped `list` */}
       <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
@@ -126,7 +135,13 @@ export const TransactionsPage: React.FC<TransactionsPageProps> = ({ type }) => {
 
       {showForm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <TransactionForm type={type} initialData={editingTx} onSubmit={handleSave} onCancel={() => setShowForm(false)} />
+          <TransactionForm 
+            type={type} 
+            initialData={editingTx} 
+            onSubmit={handleSave} 
+            onCancel={() => { setShowForm(false); setEditingTx(undefined); }} 
+            onDelete={handleDelete}
+          />
         </div>
       )}
     </div>

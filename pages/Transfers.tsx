@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { UI_LABELS } from '../constants';
-import { ArrowUpRight, ArrowDownLeft, Plus, History, Search, FileDown, Loader2, Printer, CheckCircle2, X, ShieldCheck, DownloadCloud, Sparkles, Gem, Landmark } from 'lucide-react';
+import { ArrowUpRight, ArrowDownLeft, Plus, History, Search, FileDown, Loader2, Printer, CheckCircle2, X, ShieldCheck, DownloadCloud, Sparkles, Gem, Landmark, Shield, Edit3, Trash2 } from 'lucide-react';
 import { Transaction, TransactionType } from '../types';
 import { TransactionForm } from '../components/TransactionForm';
 import { jsPDF } from 'jspdf';
@@ -13,6 +13,7 @@ export const TransfersPage: React.FC = () => {
   const [filterType, setFilterType] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
   const [showTypeSelector, setShowTypeSelector] = useState(false);
   const [activeFormType, setActiveFormType] = useState<TransactionType | null>(null);
+  const [editingTx, setEditingTx] = useState<Transaction | undefined>(undefined);
   const [isDownloading, setIsDownloading] = useState(false);
   
   const statementRef = useRef<HTMLDivElement>(null);
@@ -40,19 +41,67 @@ export const TransfersPage: React.FC = () => {
     return matchesSearch && matchesType;
   });
 
+  const handleDelete = (id: string) => {
+    if (window.confirm('আপনি কি এই লেনদেনটি নিশ্চিতভাবে মুছে ফেলতে চান?')) {
+      const saved = localStorage.getItem(txKey);
+      const currentTxs: Transaction[] = saved ? JSON.parse(saved) : [];
+      
+      const updated = currentTxs.filter(t => t.id !== id);
+      localStorage.setItem(txKey, JSON.stringify(updated));
+      
+      setTransactions(updated);
+      setEditingTx(undefined);
+      setActiveFormType(null);
+      setShowTypeSelector(false);
+      window.dispatchEvent(new Event('storage'));
+    }
+  };
+
+  const handleEdit = (tx: Transaction) => {
+    setEditingTx(tx);
+    setActiveFormType(tx.type);
+  };
+
+  const handleSave = (data: Transaction) => {
+    const saved = localStorage.getItem(txKey);
+    const currentTxs: Transaction[] = saved ? JSON.parse(saved) : [];
+    
+    let updated;
+    const existingIdx = currentTxs.findIndex(t => t.id === data.id);
+    
+    if (existingIdx > -1) {
+      updated = [...currentTxs];
+      updated[existingIdx] = data;
+    } else {
+      updated = [data, ...currentTxs];
+    }
+    
+    updated.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    localStorage.setItem(txKey, JSON.stringify(updated));
+    setTransactions(updated);
+    setActiveFormType(null);
+    setEditingTx(undefined);
+    setShowTypeSelector(false);
+    window.dispatchEvent(new Event('storage'));
+  };
+
   const handleDownloadPDF = async () => {
     if (!statementRef.current) return;
     setIsDownloading(true);
     
     try {
       const element = statementRef.current;
-      // High resolution capture + better font smoothing
       const canvas = await html2canvas(element, {
-        scale: 4, 
+        scale: 3, 
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: 800
+        width: element.offsetWidth,
+        height: element.scrollHeight,
+        windowHeight: element.scrollHeight,
+        y: 0,
+        scrollX: 0,
+        scrollY: 0
       });
       
       const imgData = canvas.toDataURL('image/png', 1.0);
@@ -61,7 +110,7 @@ export const TransfersPage: React.FC = () => {
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
-      pdf.save(`ManageMoney_Premium_Statement_${new Date().toISOString().split('T')[0]}.pdf`);
+      pdf.save(`MM_Statement_${new Date().getTime()}.pdf`);
     } catch (error) {
       console.error("PDF generation failed:", error);
       alert("দুঃখিত, PDF তৈরি করা সম্ভব হয়নি।");
@@ -84,7 +133,7 @@ export const TransfersPage: React.FC = () => {
           <h1 className="text-4xl font-black text-slate-900 tracking-tight flex items-center gap-3">
              লেনদেন স্ট্যাটমেন্ট <Gem className="text-amber-500" />
           </h1>
-          <p className="text-slate-500 font-medium mt-2">আপনার আয় ও ব্যয়ের পূর্ণাঙ্গ প্রমিয়াম রিপোর্ট ডাউনলোড করুন।</p>
+          <p className="text-slate-500 font-medium mt-2">আপনার আয় ও ব্যয়ের পূর্ণাঙ্গ প্রমিয়াম রিপোর্ট ম্যানেজ করুন।</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <button 
@@ -97,7 +146,7 @@ export const TransfersPage: React.FC = () => {
             <span className="relative">প্রিমিয়াম রিপোর্ট</span>
           </button>
           <button 
-            onClick={() => setShowTypeSelector(true)} 
+            onClick={() => { setEditingTx(undefined); setShowTypeSelector(true); }} 
             className="bg-indigo-600 text-white px-8 py-5 rounded-[1.5rem] font-black shadow-2xl shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2 active:scale-95"
           >
             <Plus size={24} strokeWidth={3} />
@@ -166,6 +215,7 @@ export const TransfersPage: React.FC = () => {
                 <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">তারিখ</th>
                 <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">খাত ও বিবরণ</th>
                 <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">পরিমাণ</th>
+                <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">অ্যাকশন</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -183,6 +233,12 @@ export const TransfersPage: React.FC = () => {
                   <td className={`px-10 py-7 text-xl font-black text-right ${t.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {t.type === 'INCOME' ? '+' : '-'} {currency} {t.amount.toLocaleString('bn-BD')}
                   </td>
+                  <td className="px-10 py-7 text-center">
+                    <div className="flex items-center justify-center gap-3">
+                      <button onClick={() => handleEdit(t)} className="p-3 bg-slate-100 text-slate-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all"><Edit3 size={18} /></button>
+                      <button onClick={() => handleDelete(t.id)} className="p-3 bg-slate-100 text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-500 transition-all"><Trash2 size={18} /></button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -190,122 +246,47 @@ export const TransfersPage: React.FC = () => {
         </div>
       </div>
 
-      {/* --- GORGEOUS LUXURY PDF TEMPLATE (HIDDEN) --- */}
-      <div style={{ position: 'absolute', left: '-9999px', top: '0', width: '210mm' }}>
-        <div ref={statementRef} className="bg-white p-20 text-slate-900 relative overflow-hidden" style={{ fontFamily: "'Hind Siliguri', sans-serif", textRendering: 'optimizeLegibility' }}>
-          
-          {/* Color Grading & Accents */}
-          <div className="absolute top-0 left-0 w-full h-5 bg-gradient-to-r from-[#0f172a] via-[#312e81] to-[#4338ca]"></div>
-          <div className="absolute bottom-0 left-0 w-full h-2 bg-slate-50"></div>
-          
-          {/* Background Patterns */}
-          <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-indigo-50/30 rounded-full -mr-[200px] -mt-[200px] blur-[100px]"></div>
-
-          <div className="flex justify-between items-start mb-20 relative z-10">
+      <div style={{ position: 'fixed', top: 0, left: '-100vw', width: '210mm', opacity: 0, pointerEvents: 'none', zIndex: -1000 }}>
+        <div ref={statementRef} className="bg-white p-20 text-slate-900 relative" style={{ fontFamily: "'Hind Siliguri', sans-serif", width: '210mm' }}>
+          <div className="absolute top-0 left-0 w-full h-8 bg-gradient-to-r from-indigo-950 via-indigo-800 to-indigo-900"></div>
+          <div className="absolute top-8 left-0 w-full h-1 bg-amber-400"></div>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-[0.03] pointer-events-none -rotate-12"><Landmark size={600} /></div>
+          <div className="flex justify-between items-start mb-20 relative z-10 pt-10">
             <div className="flex items-center gap-6">
-              <div className="w-20 h-20 bg-slate-900 rounded-[2rem] flex items-center justify-center text-white shadow-2xl rotate-3">
-                <Landmark size={44} strokeWidth={1.5} />
+              <div className="w-24 h-24 bg-indigo-950 rounded-[2.5rem] flex items-center justify-center text-white shadow-2xl relative">
+                <div className="absolute inset-0 bg-amber-400/10 rounded-[2.5rem] animate-pulse"></div>
+                <Landmark size={48} className="text-amber-400" />
               </div>
-              <div>
-                <h1 className="text-5xl font-black text-slate-900 tracking-tighter leading-tight mb-2">ম্যানেজ মানি</h1>
-                <p className="text-[11px] font-black text-indigo-600 uppercase tracking-[0.4em] flex items-center gap-2">
-                  <Sparkles size={14} className="fill-current" /> Financial Excellence Statement
-                </p>
-              </div>
+              <div><h1 className="text-5xl font-black text-slate-900 tracking-tighter leading-tight">ম্যানেজ মানি</h1><p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.5em] mt-1 flex items-center gap-2"><Shield size={12} className="fill-current" /> Verified Financial Statement</p></div>
             </div>
-
-            <div className="text-right">
-              <div className="bg-slate-50 border border-slate-100 p-8 rounded-[2.5rem] inline-block shadow-sm">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Generated On</p>
-                <p className="text-2xl font-black text-slate-900">{new Date().toLocaleDateString('bn-BD')}</p>
-                <p className="text-[9px] text-indigo-500 font-bold mt-2 uppercase tracking-widest">Doc-Ref: #{Date.now().toString().slice(-8)}</p>
-              </div>
-            </div>
+            <div className="text-right"><div className="bg-slate-50 border-2 border-slate-100 p-8 rounded-[3rem] inline-block shadow-sm"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Issue Date</p><p className="text-2xl font-black text-slate-900">{new Date().toLocaleDateString('bn-BD')}</p><p className="text-[10px] text-amber-600 font-bold mt-2 uppercase tracking-[0.2em]">REF: MM-{Date.now().toString().slice(-8)}</p></div></div>
           </div>
-
-          <div className="bg-[#0f172a] p-12 rounded-[3.5rem] mb-16 shadow-2xl relative overflow-hidden">
-             <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
+          <div className="bg-indigo-950 p-12 rounded-[4rem] mb-16 shadow-2xl relative overflow-hidden group">
+             <div className="absolute top-0 right-0 w-80 h-80 bg-white/5 rounded-full -mr-40 -mt-40 blur-3xl group-hover:bg-white/10 transition-colors"></div>
              <div className="grid grid-cols-2 gap-12 relative z-10">
-                <div className="border-l-4 border-indigo-500 pl-8">
-                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-3">Holder Name</p>
-                  <h3 className="text-3xl font-black text-white">{userProfile.name || 'সম্মানিত গ্রাহক'}</h3>
-                  <p className="text-sm text-white/50 font-bold mt-1">{userEmail}</p>
+                <div className="border-l-4 border-amber-400 pl-8">
+                  <p className="text-[10px] font-black text-indigo-300 uppercase tracking-[0.25em] mb-4">Account Holder</p>
+                  <h3 className="text-3xl font-black text-white mb-2">{userProfile.name || 'সম্মানিত গ্রাহক'}</h3>
+                  <p className="text-sm text-indigo-200 font-bold opacity-70">{userEmail}</p>
                 </div>
-                <div className="text-right">
-                   <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-3">Financial Standing</p>
-                   <h3 className="text-4xl font-black text-white">{currency} {netBalance.toLocaleString('bn-BD')}</h3>
-                   <p className="text-xs text-emerald-400 font-black mt-1 uppercase tracking-widest">Premium Account Status</p>
+                <div className="text-right flex flex-col justify-center">
+                   <p className="text-[10px] font-black text-indigo-300 uppercase tracking-[0.25em] mb-4">Net Current Value</p>
+                   <h3 className="text-5xl font-black text-amber-400">{currency} {netBalance.toLocaleString('bn-BD')}</h3>
                 </div>
              </div>
           </div>
-
-          <div className="grid grid-cols-3 gap-8 mb-16">
-            <div className="bg-emerald-50/50 p-8 rounded-[2.5rem] border-2 border-emerald-100/50">
-               <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-3">Cumulative Inflow</p>
-               <p className="text-3xl font-black text-emerald-900">{currency} {totalIn.toLocaleString('bn-BD')}</p>
-            </div>
-            <div className="bg-rose-50/50 p-8 rounded-[2.5rem] border-2 border-rose-100/50">
-               <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-3">Cumulative Outflow</p>
-               <p className="text-3xl font-black text-rose-900">{currency} {totalOut.toLocaleString('bn-BD')}</p>
-            </div>
-            <div className="bg-indigo-50/50 p-8 rounded-[2.5rem] border-2 border-indigo-100/50">
-               <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-3">Total Activities</p>
-               <p className="text-3xl font-black text-indigo-900">{filteredList.length} <span className="text-sm font-bold opacity-50 uppercase ml-1">Entries</span></p>
-            </div>
-          </div>
-
-          <div className="mb-20">
-            <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] mb-10 border-b border-slate-100 pb-6">Detailed Ledger Entries</h4>
+          <div className="mb-20 relative z-10">
+            <h4 className="text-[12px] font-black text-slate-800 uppercase tracking-[0.4em] mb-10 border-b-2 border-slate-50 pb-6">Detailed Activity Logs</h4>
             <table className="w-full">
-              <thead>
-                <tr>
-                  <th className="py-5 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-left">Posting Date</th>
-                  <th className="py-5 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-left">Description</th>
-                  <th className="py-5 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Activity Amount</th>
-                </tr>
-              </thead>
+              <thead><tr className="text-left"><th className="pb-6 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Value Date</th><th className="pb-6 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Narrative</th><th className="pb-6 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Amount</th></tr></thead>
               <tbody className="divide-y-2 divide-slate-50">
                 {filteredList.map((t) => (
-                  <tr key={t.id}>
-                    <td className="py-8 px-6 text-sm font-black text-slate-400">{t.date}</td>
-                    <td className="py-8 px-6">
-                       <p className="text-[9px] font-black uppercase text-indigo-500 mb-1 tracking-widest">{t.category}</p>
-                       <p className="text-lg font-black text-slate-800 leading-tight">{t.description || 'Verified Transfer'}</p>
-                    </td>
-                    <td className={`py-8 px-6 text-2xl font-black text-right ${t.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {t.type === 'INCOME' ? '+' : '-'} {currency} {t.amount.toLocaleString('bn-BD')}
-                    </td>
-                  </tr>
+                  <tr key={t.id}><td className="py-8 px-4 text-sm font-black text-slate-400">{t.date}</td><td className="py-8 px-4"><p className="text-[9px] font-black uppercase text-indigo-600 tracking-widest">{t.category}</p><p className="text-lg font-black text-slate-800">{t.description || 'Entry'}</p></td><td className={`py-8 px-4 text-2xl font-black text-right ${t.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>{t.type === 'INCOME' ? '+' : '-'} {currency} {t.amount.toLocaleString('bn-BD')}</td></tr>
                 ))}
               </tbody>
             </table>
           </div>
-
-          <div className="mt-32 pt-12 border-t-2 border-slate-50 flex justify-between items-end relative z-10">
-            <div>
-              <div className="flex items-center gap-3 text-indigo-600 mb-4">
-                <ShieldCheck size={24} />
-                <p className="text-xs font-black uppercase tracking-[0.2em]">Authentic Digital Artifact</p>
-              </div>
-              <p className="text-[10px] text-slate-400 font-bold max-w-sm leading-relaxed">
-                This document is a formal record of financial transactions managed by Manage Money AI. 
-                System-generated authenticity code: <b>{Math.random().toString(36).toUpperCase().substring(2, 12)}</b>
-              </p>
-            </div>
-            
-            <div className="text-right">
-               <div className="w-32 h-32 bg-slate-50 rounded-full border-4 border-white shadow-xl flex items-center justify-center mb-6 ml-auto">
-                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=https://manage-money.app" alt="QR" className="w-24 h-24 grayscale opacity-40" />
-               </div>
-               <h4 className="text-2xl font-black text-slate-900 tracking-tighter">Manage Money AI</h4>
-               <p className="text-[10px] text-indigo-500 font-black mt-1 uppercase tracking-widest">www.manage-money.app</p>
-            </div>
-          </div>
-
-          {/* Watermark */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-[0.03] pointer-events-none rotate-[-45deg]">
-             <Landmark size={800} />
-          </div>
+          <div className="absolute bottom-0 left-0 w-full h-4 bg-amber-400"></div>
         </div>
       </div>
 
@@ -334,17 +315,10 @@ export const TransfersPage: React.FC = () => {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
           <TransactionForm 
             type={activeFormType} 
-            onSubmit={(tx) => {
-              const saved = localStorage.getItem(txKey);
-              const currentTxs: Transaction[] = saved ? JSON.parse(saved) : [];
-              const updated = [tx, ...currentTxs];
-              localStorage.setItem(txKey, JSON.stringify(updated));
-              setTransactions(updated);
-              setActiveFormType(null);
-              setShowTypeSelector(false);
-              window.dispatchEvent(new Event('storage'));
-            }} 
-            onCancel={() => { setActiveFormType(null); setShowTypeSelector(false); }} 
+            initialData={editingTx}
+            onSubmit={handleSave} 
+            onCancel={() => { setActiveFormType(null); setShowTypeSelector(false); setEditingTx(undefined); }} 
+            onDelete={handleDelete}
           />
         </div>
       )}

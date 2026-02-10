@@ -2,15 +2,16 @@
 import React, { useState, useEffect } from 'react';
 import { UI_LABELS } from '../constants';
 import { Loan } from '../types';
-import { Phone } from 'lucide-react';
+import { Phone, Trash2 } from 'lucide-react';
 
 interface LoanFormProps {
   initialData?: Loan;
   onSubmit: (data: Partial<Loan>) => void;
   onCancel: () => void;
+  onDelete?: (id: string) => void;
 }
 
-export const LoanForm: React.FC<LoanFormProps> = ({ initialData, onSubmit, onCancel }) => {
+export const LoanForm: React.FC<LoanFormProps> = ({ initialData, onSubmit, onCancel, onDelete }) => {
   const [formData, setFormData] = useState({
     personName: initialData?.personName || '',
     phoneNumber: initialData?.phoneNumber || '',
@@ -31,9 +32,20 @@ export const LoanForm: React.FC<LoanFormProps> = ({ initialData, onSubmit, onCan
 
   return (
     <div className="bg-white p-8 rounded-[2rem] shadow-2xl border border-slate-100 max-w-md w-full animate-in fade-in zoom-in duration-300">
-      <h2 className="text-2xl font-black text-slate-900 mb-6">
-        {initialData ? 'লোন সংশোধন করুন' : 'নতুন লোন যোগ করুন'}
-      </h2>
+      <div className="flex justify-between items-start mb-6">
+        <h2 className="text-2xl font-black text-slate-900">
+          {initialData ? 'লোন সংশোধন করুন' : 'নতুন লোন যোগ করুন'}
+        </h2>
+        {initialData && onDelete && (
+          <button 
+            type="button" 
+            onClick={() => onDelete(initialData.id)}
+            className="p-3 bg-rose-50 text-rose-500 rounded-2xl hover:bg-rose-600 hover:text-white transition-all shadow-sm"
+          >
+            <Trash2 size={20} />
+          </button>
+        )}
+      </div>
       
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>

@@ -1,15 +1,18 @@
+
 import React, { useState, useEffect } from 'react';
 import { UI_LABELS, CATEGORIES } from '../constants';
 import { TransactionType, Transaction } from '../types';
+import { Trash2 } from 'lucide-react';
 
 interface TransactionFormProps {
   type: TransactionType;
   initialData?: Transaction;
   onSubmit: (data: any) => void;
   onCancel: () => void;
+  onDelete?: (id: string) => void;
 }
 
-export const TransactionForm: React.FC<TransactionFormProps> = ({ type, initialData, onSubmit, onCancel }) => {
+export const TransactionForm: React.FC<TransactionFormProps> = ({ type, initialData, onSubmit, onCancel, onDelete }) => {
   const [currency, setCurrency] = useState('৳');
   const [formData, setFormData] = useState({
     amount: initialData?.amount.toString() || '',
@@ -40,10 +43,22 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ type, initialD
 
   return (
     <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-slate-100 max-w-md w-full animate-in fade-in zoom-in duration-300">
-      <h2 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-3">
-        <div className={`w-3 h-8 rounded-full ${type === 'INCOME' ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
-        {initialData ? 'লেনদেন সংশোধন' : `${type === 'INCOME' ? 'আয়' : 'ব্যয়'} যোগ করুন`}
-      </h2>
+      <div className="flex justify-between items-start mb-6">
+        <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+          <div className={`w-3 h-8 rounded-full ${type === 'INCOME' ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
+          {initialData ? 'লেনদেন সংশোধন' : `${type === 'INCOME' ? 'আয়' : 'ব্যয়'} যোগ করুন`}
+        </h2>
+        {initialData && onDelete && (
+          <button 
+            type="button" 
+            onClick={() => onDelete(initialData.id)}
+            className="p-3 bg-rose-50 text-rose-500 rounded-2xl hover:bg-rose-600 hover:text-white transition-all shadow-sm"
+            title="মুছে ফেলুন"
+          >
+            <Trash2 size={20} />
+          </button>
+        )}
+      </div>
       
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
