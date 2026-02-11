@@ -4,18 +4,18 @@ import { Transaction, Loan, AIInsight } from "../types";
 /**
  * Manage Money - AI Service
  * 
- * আপনার অনুরোধ অনুযায়ী এবং সিস্টেম গাইডলাইন মেনে এখানে process.env.API_KEY 
- * ব্যবহার করা হয়েছে। নিশ্চিত করুন আপনার হোস্টিং ড্যাশবোর্ডে (Vercel/Netlify) 
- * এনভায়রনমেন্ট ভেরিয়েবলটির নাম 'API_KEY' দেওয়া আছে।
+ * গাইডলাইন অনুযায়ী process.env.API_KEY ব্যবহার করা হয়েছে।
+ * index.html-এ প্রসেস পলিমার ব্যবহার করায় এখন এটি ব্রাউজারে ক্রাশ করবে না।
  */
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const apiKey = process.env.API_KEY;
+const ai = new GoogleGenAI({ apiKey: apiKey || '' });
 
 export const getFinancialInsights = async (transactions: Transaction[], loans: Loan[]): Promise<AIInsight> => {
   // এপিআই কি চেক করা হচ্ছে
   if (!process.env.API_KEY) {
     console.error("API_KEY is not defined in process.env");
     return { 
-      text: "আপনার এআই সহকারী সক্রিয় করার জন্য 'API_KEY' প্রয়োজন। দয়া করে আপনার হোস্টিং প্ল্যাটফর্মে (Vercel) এনভায়রনমেন্ট ভেরিয়েবলটির নাম 'API_KEY' দিন।",
+      text: "আপনার এআই সহকারী সক্রিয় করার জন্য 'API_KEY' প্রয়োজন। দয়া করে আপনার Vercel ড্যাশবোর্ডে গিয়ে Environment Variables এ 'API_KEY' নামে ভেরিয়েবলটি সেট করুন।",
       sources: [] 
     };
   }

@@ -31,6 +31,10 @@
             background: #94a3b8;
         }
     </style>
+    <script>
+        // Polyfill to prevent white screen crash in browser environments where process is not defined
+        window.process = window.process || { env: {} };
+    </script>
     <script type="importmap">
 {
   "imports": {
