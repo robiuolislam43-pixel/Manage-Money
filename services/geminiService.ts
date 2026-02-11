@@ -2,13 +2,13 @@ import { GoogleGenAI } from "@google/genai";
 import { Transaction, Loan, AIInsight } from "../types";
 
 export const getFinancialInsights = async (transactions: Transaction[], loans: Loan[]): Promise<AIInsight> => {
-  // Use the standard environment variable name as per instructions
-  const apiKey = process.env.API_KEY;
+  // Accessing the key from window.process.env defined in index.html
+  const apiKey = (window as any).process?.env?.API_KEY || process.env.API_KEY;
   
   if (!apiKey) {
-    console.error("Gemini API Key is missing. Make sure you added 'API_KEY' in Vercel settings.");
+    console.error("Gemini API Key is missing.");
     return { 
-      text: "আপনার এআই সহকারী সক্রিয় করতে 'API_KEY' ভেরিয়েবলটি প্রয়োজন। দয়া করে সেটিংস চেক করুন।",
+      text: "আপনার এআই সহকারী সক্রিয় করতে 'API_KEY' প্রয়োজন। দয়া করে নিশ্চিত করুন এটি কোডে যোগ করা হয়েছে।",
       sources: [] 
     };
   }
@@ -36,18 +36,17 @@ export const getFinancialInsights = async (transactions: Transaction[], loans: L
   const pendingPayable = loans.filter(l => l.type === 'I_OWE' && l.status === 'PENDING').reduce((sum, l) => sum + (Number(l.amount) || 0), 0);
   
   const prompt = `
-    Analyze this financial data and provide 3 smart, actionable advice in Bengali.
-    
-    Current Stats:
-    - Total Income: ${income} BDT
-    - Total Expense: ${expense} BDT
-    - Balance: ${balance} BDT
-    - Spending: ${topCategories || 'No records'}
-    - Owe Me: ${pendingReceivable} BDT
-    - I Owe: ${pendingPayable} BDT
+    Analyze this financial status for a user in Bangladesh:
+    - Current Income: ${income} BDT
+    - Current Expense: ${expense} BDT
+    - Net Balance: ${balance} BDT
+    - Highest Spending Categories: ${topCategories || 'No specific records'}
+    - Loans/Receivables: ${pendingReceivable} BDT to receive, ${pendingPayable} BDT to pay.
 
-    Search for current inflation in Bangladesh or best saving schemes for this month to add real context.
-    Add a motivational quote in Bengali at the end.
+    Tasks:
+    1. Provide 3 highly specific and actionable financial advice in Bengali based on this data.
+    2. Search for current inflation trends in Bangladesh or high-interest savings bank schemes available this week to mention as real-world context.
+    3. Add a short, powerful motivational quote in Bengali about wealth management at the end.
   `;
 
   try {
@@ -56,17 +55,18 @@ export const getFinancialInsights = async (transactions: Transaction[], loans: L
       contents: [{ parts: [{ text: prompt }] }],
       config: {
         tools: [{ googleSearch: {} }],
-        temperature: 0.7,
+        temperature: 0.8,
       }
     });
     
-    const text = response.text || "এই মুহূর্তে বিশ্লেষণ সম্ভব হচ্ছে না।";
+    const text = response.text || "এই মুহূর্তে বিশ্লেষণ করা সম্ভব হচ্ছে না।";
     
+    // Extract grounding sources for transparency
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     const sources = groundingChunks
       .filter((chunk: any) => chunk.web)
       .map((chunk: any) => ({
-        title: chunk.web.title || "বিস্তারিত দেখুন",
+        title: chunk.web.title || "আরও জানুন",
         uri: chunk.web.uri
       }));
 
@@ -74,7 +74,7 @@ export const getFinancialInsights = async (transactions: Transaction[], loans: L
   } catch (error: any) {
     console.error("Gemini API Error:", error);
     return { 
-      text: "সার্ভারে সমস্যা হয়েছে। দয়া করে আপনার 'API_KEY' ঠিকভাবে সেভ করা হয়েছে কি না নিশ্চিত করুন।",
+      text: "এআই সার্ভার থেকে তথ্য পেতে সমস্যা হচ্ছে। দয়া করে আপনার ইন্টারনেট সংযোগ চেক করুন বা পরে চেষ্টা করুন।",
       sources: [] 
     };
   }

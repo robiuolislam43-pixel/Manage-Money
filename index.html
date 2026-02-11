@@ -32,10 +32,11 @@
         }
     </style>
     <script>
-        // Ensure process.env is available in the browser for API Key reading
+        // Global process object setup with the provided API Key
         window.process = window.process || { env: {} };
         window.process.env = window.process.env || {};
         window.process.env.NODE_ENV = 'production';
+        window.process.env.API_KEY = 'AIzaSyAjUyuJiEorJXiKoLcNHJVSQR-OV4Fi6ug';
     </script>
     <script type="importmap">
 {
