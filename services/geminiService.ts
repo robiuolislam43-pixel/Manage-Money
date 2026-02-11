@@ -4,21 +4,24 @@ import { Transaction, Loan, AIInsight } from "../types";
 /**
  * Manage Money - AI Service
  * 
- * গাইডলাইন অনুযায়ী process.env.API_KEY ব্যবহার করা হয়েছে।
- * index.html-এ প্রসেস পলিমার ব্যবহার করায় এখন এটি ব্রাউজারে ক্রাশ করবে না।
+ * জেমিনি এপিআই রুলস অনুযায়ী process.env.API_KEY ব্যবহার করা হয়েছে।
+ * এপিআই কি-টি সরাসরি initialization এ ব্যবহার করা হয়েছে যা সিস্টেম রুল।
  */
-const apiKey = process.env.API_KEY;
-const ai = new GoogleGenAI({ apiKey: apiKey || '' });
 
 export const getFinancialInsights = async (transactions: Transaction[], loans: Loan[]): Promise<AIInsight> => {
-  // এপিআই কি চেক করা হচ্ছে
-  if (!process.env.API_KEY) {
-    console.error("API_KEY is not defined in process.env");
+  // ১. এপিআই কি চেক করা হচ্ছে - সরাসরি process.env.API_KEY থেকে
+  const apiKey = process.env.API_KEY;
+
+  if (!apiKey) {
+    console.warn("API_KEY is missing in process.env. Check Vercel Settings.");
     return { 
-      text: "আপনার এআই সহকারী সক্রিয় করার জন্য 'API_KEY' প্রয়োজন। দয়া করে আপনার Vercel ড্যাশবোর্ডে গিয়ে Environment Variables এ 'API_KEY' নামে ভেরিয়েবলটি সেট করুন।",
+      text: "আপনার এআই অ্যাসিস্ট্যান্ট সক্রিয় করতে Vercel-এ 'API_KEY' নামে এনভায়রনমেন্ট ভেরিয়েবল যোগ করুন।",
       sources: [] 
     };
   }
+
+  // ২. ডাইনামিকালি এআই ক্লায়েন্ট তৈরি
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const income = transactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
   const expense = transactions.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
@@ -78,7 +81,7 @@ export const getFinancialInsights = async (transactions: Transaction[], loans: L
   } catch (error: any) {
     console.error("Gemini API Error:", error);
     return { 
-      text: "এআই সার্ভার থেকে তথ্য পেতে সমস্যা হচ্ছে। দয়া করে নিশ্চিত করুন আপনার এপিআই কি-টি সচল আছে এবং হোস্টিং প্ল্যাটফর্মে এর নাম 'API_KEY' হিসেবে সেট করা হয়েছে।",
+      text: "এআই সার্ভার থেকে তথ্য পেতে সমস্যা হচ্ছে। দয়া করে নিশ্চিত করুন আপনার Vercel ড্যাশবোর্ডে 'API_KEY' নামে সঠিক কি সেট করা হয়েছে।",
       sources: [] 
     };
   }

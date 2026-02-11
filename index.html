@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="bn">
 <head>
+    <script>
+        // CRITICAL: Robust polyfill for browser environments
+        (function() {
+            window.process = window.process || {};
+            window.process.env = window.process.env || {};
+            window.process.env.API_KEY = window.process.env.API_KEY || "";
+        })();
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Money - আপনার ব্যক্তিগত ফিন্যান্স পার্টনার</title>
@@ -31,10 +39,6 @@
             background: #94a3b8;
         }
     </style>
-    <script>
-        // Polyfill to prevent white screen crash in browser environments where process is not defined
-        window.process = window.process || { env: {} };
-    </script>
     <script type="importmap">
 {
   "imports": {
