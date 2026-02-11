@@ -1,4 +1,3 @@
-
 export type TransactionType = 'INCOME' | 'EXPENSE';
 
 export interface Transaction {

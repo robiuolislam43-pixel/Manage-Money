@@ -2,7 +2,8 @@ import { GoogleGenAI } from "@google/genai";
 import { Transaction, Loan, AIInsight } from "../types";
 
 export const getFinancialInsights = async (transactions: Transaction[], loans: Loan[]): Promise<AIInsight> => {
-  // Use gemini-3-flash-preview for high-performance financial reasoning
+  // The SDK will use the API key provided via process.env.API_KEY
+  // This is the standard way to handle secrets securely on Vercel or similar platforms.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const income = transactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
@@ -26,22 +27,18 @@ export const getFinancialInsights = async (transactions: Transaction[], loans: L
   const pendingPayable = loans.filter(l => l.type === 'I_OWE' && l.status === 'PENDING').reduce((sum, l) => sum + (Number(l.amount) || 0), 0);
   
   const prompt = `
-    Analyze the following financial profile as a world-class wealth strategist and provide 3 ultra-specific, data-driven recommendations in Bengali.
+    আর্থিক তথ্য বিশ্লেষণ করে ৩টি স্মার্ট এবং অ্যাকশনেবল পরামর্শ বাংলায় দিন।
+    
+    পরিসংখ্যান:
+    - মোট আয়: ${income} BDT
+    - মোট ব্যয়: ${expense} BDT
+    - বর্তমান ব্যালেন্স: ${balance} BDT
+    - প্রধান খরচের খাতসমূহ: ${topCategories || 'উল্লেখ নেই'}
+    - পাওনা টাকা: ${pendingReceivable} টাকা
+    - দেনা টাকা: ${pendingPayable} টাকা
 
-    Data Snapshot:
-    - Current Liquid Income: ${income} BDT
-    - Actual Expenses: ${expense} BDT
-    - Net Savings: ${balance} BDT
-    - Dominant Expense Sectors: ${topCategories || 'Insufficient historical data'}
-    - Uncollected Debt (Receivable): ${pendingReceivable} BDT
-    - Outstanding Liability (Payable): ${pendingPayable} BDT
-
-    Critical Instructions:
-    1. Your tone must be elite, professional, and results-oriented.
-    2. Respond with exactly 3 bulleted paragraphs in clear Bengali.
-    3. Use Search grounding to reference current economic conditions in Bangladesh (inflation, banking interest rates, or investment trends) to make your advice actionable in today's context.
-    4. Focus on 'Smart Saving' and 'Liability Management'.
-    5. End with a one-sentence powerful Bengali quote about financial freedom.
+    গুগল সার্চ ব্যবহার করে বাংলাদেশের বর্তমান মুদ্রাস্ফীতি, সঞ্চয় স্কিমের রেট বা এই মাসের প্রাসঙ্গিক অর্থনৈতিক খবরের ভিত্তিতে পরামর্শ দিন। 
+    শেষে একটি অনুপ্রেরণামূলক উক্তি যোগ করুন।
   `;
 
   try {
@@ -49,27 +46,28 @@ export const getFinancialInsights = async (transactions: Transaction[], loans: L
       model: "gemini-3-flash-preview",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
-        systemInstruction: "You are 'Manage Money AI', a sophisticated financial consultant. You analyze user cashflow and market trends to provide elite wealth-building strategies.",
         tools: [{ googleSearch: {} }],
-        temperature: 0.4,
+        temperature: 0.7,
       }
     });
     
-    const text = response.text || "দুঃখিত, এই মুহূর্তে আপনার আর্থিক তথ্য বিশ্লেষণ করা সম্ভব হয়নি।";
+    // Using the direct .text property as per guidelines
+    const text = response.text || "দুঃখিত, এই মুহূর্তে পরামর্শ জেনারেট করা সম্ভব হয়নি।";
     
+    // Extract grounding sources from Google Search
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     const sources = groundingChunks
       .filter((chunk: any) => chunk.web)
       .map((chunk: any) => ({
-        title: chunk.web.title || "আর্থিক রেফারেন্স",
+        title: chunk.web.title || "আরও জানুন",
         uri: chunk.web.uri
       }));
 
     return { text, sources };
   } catch (error: any) {
-    console.error("AI Insight Error:", error);
+    console.error("Gemini API Error:", error);
     return { 
-      text: "আপনার ফিন্যান্সিয়াল ডেটা লোড হচ্ছে অথবা এআই প্রসেসিংয়ে সাময়িকভাবে সমস্যা হচ্ছে। দয়া করে নিশ্চিত করুন আপনার ট্রানজেকশন হিসেব সঠিক আছে।",
+      text: "আর্থিক পরামর্শ লোড করতে সমস্যা হয়েছে। দয়া করে আপনার Vercel Environment Variables এ API_KEY সঠিক আছে কি না নিশ্চিত করুন।",
       sources: [] 
     };
   }

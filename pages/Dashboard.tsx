@@ -3,9 +3,8 @@ import { StatCard } from '../components/StatCard';
 import { UI_LABELS } from '../constants';
 import { 
   TrendingUp, TrendingDown, Wallet as WalletIcon, Plus, User, X, 
-  ArrowUpRight, ArrowDownLeft, Smartphone, ChevronRight, Edit3, 
-  Save, Sparkles, Loader2, RefreshCw, BrainCircuit,
-  Bell, Phone, CheckCircle2, ExternalLink, AlertCircle, TrendingUp as UpIcon
+  ArrowUpRight, ArrowDownLeft, Smartphone, ChevronRight,
+  TrendingUp as UpIcon, BrainCircuit, Loader2, RefreshCw, AlertCircle, ExternalLink, Sparkles
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Transaction, Loan, TransactionType, Wallet, AIInsight } from '../types';
@@ -22,17 +21,16 @@ export const Dashboard: React.FC = () => {
   const [activeFormType, setActiveFormType] = useState<TransactionType | null>(null);
   const [showWalletModal, setShowWalletModal] = useState(false);
 
-  const [aiInsight, setAiInsight] = useState<AIInsight | null>(null);
-  const [isLoadingAI, setIsLoadingAI] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
-
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
 
+  // AI States
+  const [aiInsight, setAiInsight] = useState<AIInsight | null>(null);
+  const [isLoadingAI, setIsLoadingAI] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const lastAnalyzedHash = useRef<string>('');
   const aiTimeoutRef = useRef<number | null>(null);
-  const isRequestInProgress = useRef<boolean>(false);
 
   const loadLocalData = useCallback(() => {
     const userEmail = localStorage.getItem('currentUserEmail') || '';
@@ -73,12 +71,12 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   const triggerAI = useCallback(async (txs: Transaction[], lnList: Loan[]) => {
+    // Generate a simple hash to prevent unnecessary API calls
     const currentSum = txs.reduce((s, t) => s + (Number(t.amount) || 0), 0);
     const currentHash = `${txs.length}-${lnList.length}-${currentSum}`;
     
-    if (currentHash === lastAnalyzedHash.current || isRequestInProgress.current) return;
+    if (currentHash === lastAnalyzedHash.current) return;
 
-    isRequestInProgress.current = true;
     setIsLoadingAI(true);
     setAiError(null);
     
@@ -87,11 +85,10 @@ export const Dashboard: React.FC = () => {
       setAiInsight(insight);
       lastAnalyzedHash.current = currentHash;
     } catch (error) {
-      console.error("Dashboard AI Error:", error);
-      setAiError("আপনার তথ্য বিশ্লেষণে সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।");
+      console.error("AI Component Error:", error);
+      setAiError("আপনার বর্তমান তথ্য অনুযায়ী পরামর্শ তৈরি করতে সমস্যা হয়েছে।");
     } finally {
       setIsLoadingAI(false);
-      isRequestInProgress.current = false;
     }
   }, []);
 
@@ -103,13 +100,14 @@ export const Dashboard: React.FC = () => {
   }, [loadLocalData]);
 
   useEffect(() => {
+    // Wait a few seconds after the last change before triggering AI
     if (transactions.length > 0 || loans.length > 0) {
       if (aiTimeoutRef.current) window.clearTimeout(aiTimeoutRef.current);
       aiTimeoutRef.current = window.setTimeout(() => {
         triggerAI(transactions, loans);
-      }, 2500);
+      }, 5000);
     } else {
-      setAiInsight({ text: "স্বাগতম! আপনার লেনদেনের হিসাব যোগ করা শুরু করলে আমি আপনাকে চমৎকার সব পরামর্শ দিতে পারব।", sources: [] });
+      setAiInsight({ text: "স্বাগতম! আপনার দৈনন্দিন আয়ের ও খরচের হিসাব যোগ করা শুরু করলে আমি আপনাকে সঠিক ফিন্যান্সিয়াল পরামর্শ দিতে পারব।", sources: [] });
     }
     return () => {
       if (aiTimeoutRef.current) window.clearTimeout(aiTimeoutRef.current);
@@ -391,8 +389,8 @@ export const Dashboard: React.FC = () => {
 
       {/* Type Selector Modal */}
       {showTypeSelector && !activeFormType && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100 max-w-sm w-full animate-in zoom-in duration-300">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100 max-sm w-full animate-in zoom-in duration-300">
             <div className="flex justify-between items-center mb-8">
               <h2 className="text-2xl font-black text-slate-900 tracking-tight">লেনদেনের ধরন</h2>
               <button onClick={() => setShowTypeSelector(false)} className="p-2 hover:bg-slate-50 rounded-2xl transition-colors text-slate-400"><X size={24} /></button>
