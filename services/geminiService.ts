@@ -1,15 +1,21 @@
 import { GoogleGenAI } from "@google/genai";
 import { Transaction, Loan, AIInsight } from "../types";
 
-// Initialize AI according to standard instructions
-// Note: process.env.API_KEY must be provided by the environment
+/**
+ * Manage Money - AI Service
+ * 
+ * আপনার অনুরোধ অনুযায়ী এবং সিস্টেম গাইডলাইন মেনে এখানে process.env.API_KEY 
+ * ব্যবহার করা হয়েছে। নিশ্চিত করুন আপনার হোস্টিং ড্যাশবোর্ডে (Vercel/Netlify) 
+ * এনভায়রনমেন্ট ভেরিয়েবলটির নাম 'API_KEY' দেওয়া আছে।
+ */
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const getFinancialInsights = async (transactions: Transaction[], loans: Loan[]): Promise<AIInsight> => {
+  // এপিআই কি চেক করা হচ্ছে
   if (!process.env.API_KEY) {
-    console.error("Gemini API Key is not found in process.env.API_KEY");
+    console.error("API_KEY is not defined in process.env");
     return { 
-      text: "আপনার এআই সহকারী সক্রিয় করতে 'API_KEY' প্রয়োজন। দয়া করে ভেরসেল (Vercel) সেটিংসে ভেরিয়েবলটির নাম শুধু 'API_KEY' দিন।",
+      text: "আপনার এআই সহকারী সক্রিয় করার জন্য 'API_KEY' প্রয়োজন। দয়া করে আপনার হোস্টিং প্ল্যাটফর্মে (Vercel) এনভায়রনমেন্ট ভেরিয়েবলটির নাম 'API_KEY' দিন।",
       sources: [] 
     };
   }
@@ -35,17 +41,17 @@ export const getFinancialInsights = async (transactions: Transaction[], loans: L
   const pendingPayable = loans.filter(l => l.type === 'I_OWE' && l.status === 'PENDING').reduce((sum, l) => sum + (Number(l.amount) || 0), 0);
   
   const prompt = `
-    Analyze this financial status for a user in Bangladesh:
-    - Income: ${income} BDT
-    - Expense: ${expense} BDT
-    - Net Balance: ${balance} BDT
-    - Top Spending: ${topCategories || 'None recorded'}
-    - Debt Status: Receivable ${pendingReceivable} BDT, Payable ${pendingPayable} BDT.
+    Analyze this financial data for a user in Bangladesh:
+    - Current Income: ${income} BDT
+    - Current Expense: ${expense} BDT
+    - Current Balance: ${balance} BDT
+    - Highest Spending Categories: ${topCategories || 'Not available'}
+    - Debts: ${pendingReceivable} BDT to receive, ${pendingPayable} BDT to pay.
 
-    Requirement: 
-    1. Give 3 short, actionable financial advice in Bengali.
-    2. Reference current inflation or savings schemes in Bangladesh using Google Search.
-    3. Include a short motivational quote in Bengali about money at the end.
+    Tasks:
+    1. Provide 3 specific financial advice in Bengali.
+    2. Use Google Search to mention any latest inflation trends or high-interest bank schemes in Bangladesh.
+    3. End with a powerful motivational quote in Bengali about financial freedom.
   `;
 
   try {
@@ -54,24 +60,25 @@ export const getFinancialInsights = async (transactions: Transaction[], loans: L
       contents: [{ parts: [{ text: prompt }] }],
       config: {
         tools: [{ googleSearch: {} }],
+        temperature: 0.7,
       }
     });
     
-    const text = response.text || "তথ্য বিশ্লেষণ সম্ভব হচ্ছে না।";
+    const text = response.text || "এই মুহূর্তে তথ্য বিশ্লেষণ করা সম্ভব হচ্ছে না।";
     
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     const sources = groundingChunks
       .filter((chunk: any) => chunk.web)
       .map((chunk: any) => ({
-        title: chunk.web.title || "আরও জানুন",
+        title: chunk.web.title || "আরও বিস্তারিত",
         uri: chunk.web.uri
       }));
 
     return { text, sources };
   } catch (error: any) {
-    console.error("Gemini API Error Detail:", error);
+    console.error("Gemini API Error:", error);
     return { 
-      text: "এআই সার্ভার থেকে তথ্য পেতে সমস্যা হচ্ছে। দয়া করে নিশ্চিত করুন আপনার এপিআই কি-টি (API Key) সঠিক এবং এটি 'API_KEY' নামে সেভ করা হয়েছে।",
+      text: "এআই সার্ভার থেকে তথ্য পেতে সমস্যা হচ্ছে। দয়া করে নিশ্চিত করুন আপনার এপিআই কি-টি সচল আছে এবং হোস্টিং প্ল্যাটফর্মে এর নাম 'API_KEY' হিসেবে সেট করা হয়েছে।",
       sources: [] 
     };
   }
