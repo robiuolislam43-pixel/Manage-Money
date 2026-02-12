@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { StatCard } from '../components/StatCard';
 import { UI_LABELS } from '../constants';
@@ -49,13 +50,18 @@ export const Dashboard: React.FC = () => {
     const loanKey = `loans_${userEmail}`;
     const walletKey = `wallets_${userEmail}`;
 
+    // Load and deduplicate transactions
     const savedTxs = localStorage.getItem(txKey);
     let txs: Transaction[] = savedTxs ? JSON.parse(savedTxs) : [];
+    // DEDUPLICATION: Ensure no duplicate IDs
+    txs = Array.from(new Map(txs.map(item => [item.id, item])).values());
     txs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setTransactions(txs);
 
+    // Load and deduplicate loans
     const savedLoans = localStorage.getItem(loanKey);
-    const lnList: Loan[] = savedLoans ? JSON.parse(savedLoans) : [];
+    let lnList: Loan[] = savedLoans ? JSON.parse(savedLoans) : [];
+    lnList = Array.from(new Map(lnList.map(item => [item.id, item])).values());
     setLoans(lnList);
 
     const savedWallets = localStorage.getItem(walletKey);
@@ -67,11 +73,11 @@ export const Dashboard: React.FC = () => {
     ];
     setWallets(walletList);
 
+    // Sync back to Supabase only if needed
     syncService.syncAllData(userEmail, { transactions: txs, loans: lnList, wallets: walletList });
   }, []);
 
   const triggerAI = useCallback(async (txs: Transaction[], lnList: Loan[]) => {
-    // Generate a simple hash to prevent unnecessary API calls
     const currentSum = txs.reduce((s, t) => s + (Number(t.amount) || 0), 0);
     const currentHash = `${txs.length}-${lnList.length}-${currentSum}`;
     
@@ -85,8 +91,8 @@ export const Dashboard: React.FC = () => {
       setAiInsight(insight);
       lastAnalyzedHash.current = currentHash;
     } catch (error) {
-      console.error("AI Component Error:", error);
-      setAiError("আপনার বর্তমান তথ্য অনুযায়ী পরামর্শ তৈরি করতে সমস্যা হয়েছে।");
+      console.error("AI Error:", error);
+      setAiError("আপনার তথ্য অনুযায়ী পরামর্শ তৈরি করতে সমস্যা হয়েছে।");
     } finally {
       setIsLoadingAI(false);
     }
@@ -100,14 +106,13 @@ export const Dashboard: React.FC = () => {
   }, [loadLocalData]);
 
   useEffect(() => {
-    // Wait a few seconds after the last change before triggering AI
     if (transactions.length > 0 || loans.length > 0) {
       if (aiTimeoutRef.current) window.clearTimeout(aiTimeoutRef.current);
       aiTimeoutRef.current = window.setTimeout(() => {
         triggerAI(transactions, loans);
       }, 5000);
     } else {
-      setAiInsight({ text: "স্বাগতম! আপনার দৈনন্দিন আয়ের ও খরচের হিসাব যোগ করা শুরু করলে আমি আপনাকে সঠিক ফিন্যান্সিয়াল পরামর্শ দিতে পারব।", sources: [] });
+      setAiInsight({ text: "স্বাগতম! আপনার আয়ের ও খরচের হিসাব যোগ করা শুরু করলে আমি আপনাকে সঠিক ফিন্যান্সিয়াল পরামর্শ দিতে পারব।", sources: [] });
     }
     return () => {
       if (aiTimeoutRef.current) window.clearTimeout(aiTimeoutRef.current);
@@ -134,7 +139,6 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
-      {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center gap-5">
           <div className="w-20 h-20 rounded-[2rem] bg-indigo-600 flex items-center justify-center overflow-hidden border-4 border-white shadow-2xl shadow-indigo-100 shrink-0 transform hover:scale-105 transition-transform duration-500">
@@ -145,7 +149,7 @@ export const Dashboard: React.FC = () => {
                <h1 className="text-3xl font-black text-slate-900 tracking-tight">আসসালামু আলাইকুম, {userName}!</h1>
                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100">
                   <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
-                  <span className="text-[10px] font-black uppercase tracking-widest">Live Sync</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest">Safe Sync</span>
                </div>
             </div>
             <p className="text-slate-500 font-medium mt-1">আপনার ফিন্যান্সিয়াল সিকিউরিটি আমাদের অগ্রাধিকার।</p>
@@ -155,16 +159,13 @@ export const Dashboard: React.FC = () => {
           onClick={() => setShowTypeSelector(true)} 
           className="group relative overflow-hidden bg-indigo-600 text-white px-8 py-4.5 rounded-[1.5rem] font-black shadow-2xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95"
         >
-          <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
           <Plus size={22} strokeWidth={3} className="inline mr-2 group-hover:rotate-90 transition-transform duration-500" />
           <span>নতুন এন্ট্রি যোগ করুন</span>
         </button>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard label={UI_LABELS.BALANCE} value={`${currency} ${mainBalance.toLocaleString('bn-BD')}`} trend={`সঞ্চয় হার ${savingsRate}%`} trendType={Number(savingsRate) >= 20 ? 'up' : 'down'} icon={<WalletIcon className="text-indigo-600" />} colorClass="bg-indigo-50" />
-        
         <div onClick={() => setShowWalletModal(true)} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:border-indigo-100 transition-all cursor-pointer group active:scale-95 relative overflow-hidden">
           <div className="absolute -right-4 -bottom-4 text-slate-50 opacity-10 group-hover:opacity-20 transition-opacity"><Smartphone size={100} /></div>
           <div className="flex items-start justify-between relative z-10">
@@ -176,46 +177,31 @@ export const Dashboard: React.FC = () => {
             <div className="p-3 rounded-xl bg-pink-50 text-pink-600 group-hover:scale-110 transition-transform"><Smartphone size={24} /></div>
           </div>
         </div>
-
         <StatCard label={`মোট ${UI_LABELS.INCOME}`} value={`${currency} ${totalIncome.toLocaleString('bn-BD')}`} trend="সকল সময়" trendType="up" icon={<TrendingUp className="text-emerald-600" />} colorClass="bg-emerald-50" />
         <StatCard label={`মোট ${UI_LABELS.EXPENSE}`} value={`${currency} ${totalExpense.toLocaleString('bn-BD')}`} trend="সকল সময়" trendType="down" icon={<TrendingDown className="text-rose-600" />} colorClass="bg-rose-50" />
       </div>
 
-      {/* Main Charts & Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-xl font-black text-slate-800">আয় এবং ব্যয়ের তুলনা</h3>
-            <div className="flex gap-2">
-               <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-emerald-500"></div><span className="text-xs font-bold text-slate-400">আয়</span></div>
-               <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-rose-500"></div><span className="text-xs font-bold text-slate-400">ব্যয়</span></div>
-            </div>
           </div>
           <div className="w-full" style={{ height: '380px', minHeight: '380px' }}>
             {transactions.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%" key={`rc-dash-${mainBalance}`}>
-                <BarChart 
-                  data={chartData} 
-                  margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
-                >
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 14, fill: '#94a3b8', fontWeight: 'bold' }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8', fontWeight: 'bold' }} />
-                  <Tooltip 
-                    cursor={{ fill: '#f8fafc', radius: 12 }} 
-                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', padding: '12px' }}
-                  />
-                  <Bar dataKey="value" radius={[16, 16, 0, 0]} barSize={80} animationDuration={1500}>
-                    {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} fillOpacity={0.9} />
-                    ))}
+                  <Tooltip cursor={{ fill: '#f8fafc', radius: 12 }} />
+                  <Bar dataKey="value" radius={[16, 16, 0, 0]} barSize={80}>
+                    {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center text-center p-10 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200">
-                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-4 text-slate-300 shadow-sm"><UpIcon size={32} /></div>
-                <p className="text-slate-400 font-bold italic">চার্ট দেখানোর জন্য পর্যাপ্ত তথ্য নেই। <br/>নতুন লেনদেন যোগ করা শুরু করুন।</p>
+                <p className="text-slate-400 font-bold italic">চার্ট দেখানোর জন্য পর্যাপ্ত তথ্য নেই।</p>
               </div>
             )}
           </div>
@@ -224,13 +210,12 @@ export const Dashboard: React.FC = () => {
         <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden h-fit">
           <div className="p-7 border-b border-slate-50 flex items-center justify-between">
             <h3 className="font-black text-lg text-slate-800">সাম্প্রতিক লেনদেন</h3>
-            <button className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:underline">সকল দেখুন</button>
           </div>
           <div className="divide-y divide-slate-50">
-            {transactions.length > 0 ? transactions.slice(0, 5).map((t) => (
+            {transactions.slice(0, 5).map((t) => (
               <div key={t.id} className="p-5 flex items-center justify-between hover:bg-slate-50/80 transition-all cursor-default group">
                 <div className="flex items-center gap-4">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300 ${t.type === 'INCOME' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm ${t.type === 'INCOME' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                     {t.type === 'INCOME' ? <ArrowDownLeft size={24} /> : <ArrowUpRight size={24} />}
                   </div>
                   <div className="overflow-hidden">
@@ -242,24 +227,16 @@ export const Dashboard: React.FC = () => {
                   {t.type === 'INCOME' ? '+' : '-'} {currency} {(Number(t.amount) || 0).toLocaleString('bn-BD')}
                 </p>
               </div>
-            )) : (
-              <div className="p-16 text-center">
-                 <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-200"><TrendingUp size={24} /></div>
-                 <p className="text-slate-300 font-bold text-xs uppercase tracking-[0.2em]">কোনো রেকর্ড নেই</p>
-              </div>
-            )}
+            ))}
           </div>
         </div>
       </div>
 
-      {/* AI Insights Section */}
       <div className="relative group pt-8">
         <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-[3rem] blur-xl opacity-20 group-hover:opacity-30 transition duration-1000"></div>
         <div className="relative bg-white/90 backdrop-blur-2xl p-8 lg:p-12 rounded-[3rem] border border-white shadow-2xl">
           <div className="flex flex-col md:flex-row md:items-center gap-6 mb-10">
-            <div className={`w-20 h-20 rounded-[1.5rem] flex items-center justify-center text-white bg-gradient-to-br from-indigo-600 to-violet-700 shadow-2xl transform group-hover:rotate-6 transition-transform duration-500`}>
-              <BrainCircuit size={40} />
-            </div>
+            <div className={`w-20 h-20 rounded-[1.5rem] flex items-center justify-center text-white bg-gradient-to-br from-indigo-600 to-violet-700 shadow-2xl transform group-hover:rotate-6 transition-transform duration-500`}><BrainCircuit size={40} /></div>
             <div>
               <h2 className="text-3xl font-black text-slate-900 tracking-tight">ম্যানেজ মানি এআই এসিস্ট্যান্ট</h2>
               <p className="text-slate-400 font-bold text-xs uppercase tracking-[0.3em] mt-2 flex items-center gap-2">
@@ -267,149 +244,42 @@ export const Dashboard: React.FC = () => {
                 {isLoadingAI ? 'অ্যানালাইসিস চলছে...' : 'ইনসাইটস আপ-টু-ডেট'}
               </p>
             </div>
-            {!isLoadingAI && (
-              <button 
-                onClick={() => {
-                  lastAnalyzedHash.current = ''; 
-                  triggerAI(transactions, loans);
-                }} 
-                className="md:ml-auto flex items-center gap-2 px-6 py-3 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-2xl font-black transition-all group/refresh"
-                title="রিফ্রেশ করুন"
-              >
-                <RefreshCw size={18} className="group-hover/refresh:rotate-180 transition-transform duration-500" />
-                <span>রিফ্রেশ</span>
-              </button>
-            )}
+            {!isLoadingAI && <button onClick={() => { lastAnalyzedHash.current = ''; triggerAI(transactions, loans); }} className="md:ml-auto flex items-center gap-2 px-6 py-3 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-2xl font-black transition-all group/refresh"><RefreshCw size={18} /> <span>রিফ্রেশ</span></button>}
           </div>
-          
           <div className="bg-slate-50/50 rounded-[2.5rem] border border-slate-100 p-8 lg:p-12 min-h-[220px] shadow-inner relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none"><Sparkles size={120} /></div>
-            
-            {isLoadingAI ? (
-               <div className="flex flex-col items-center py-12 gap-6">
-                  <div className="relative">
-                    <Loader2 className="animate-spin text-indigo-600" size={48} />
-                    <div className="absolute inset-0 bg-indigo-400 blur-xl opacity-20 animate-pulse"></div>
-                  </div>
-                  <p className="text-slate-500 font-black animate-pulse text-sm uppercase tracking-widest">আপনার লেনদেন ও বর্তমান বাজার বিশ্লেষণ করা হচ্ছে...</p>
-               </div>
-            ) : aiError ? (
-              <div className="flex flex-col items-center py-10 text-center gap-5">
-                 <AlertCircle className="text-rose-500" size={48} />
-                 <p className="text-slate-600 font-bold max-w-sm text-lg">{aiError}</p>
-                 <button 
-                   onClick={() => triggerAI(transactions, loans)}
-                   className="mt-2 px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-2xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95"
-                 >
-                   আবার চেষ্টা করুন
-                 </button>
-              </div>
-            ) : (
-              <div className="animate-in fade-in slide-in-from-bottom-6 duration-1000">
-                <div className="prose prose-slate max-w-none">
-                  <p className="whitespace-pre-line text-slate-700 font-medium leading-[2] text-lg lg:text-xl">
-                    {aiInsight?.text || "আপনার বর্তমান লেনদেন পর্যবেক্ষণ করা হচ্ছে..."}
-                  </p>
-                </div>
-                {aiInsight?.sources && aiInsight.sources.length > 0 && (
-                  <div className="mt-10 pt-10 border-t border-slate-200/50">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] mb-4">তথ্যসূত্র ও গ্লোবাল ইকোনমিক সোর্স:</p>
-                    <div className="flex flex-wrap gap-3">
-                      {aiInsight.sources.map((source, idx) => (
-                        <a 
-                          key={idx} 
-                          href={source.uri} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2.5 px-4 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-black text-indigo-600 hover:bg-indigo-600 hover:text-white hover:shadow-xl transition-all shadow-sm group/link active:scale-95"
-                        >
-                          <ExternalLink size={14} className="shrink-0" />
-                          <span className="truncate max-w-[180px]">{source.title}</span>
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            {isLoadingAI ? <div className="flex flex-col items-center py-12 gap-6"><Loader2 className="animate-spin text-indigo-600" size={48} /><p className="text-slate-500 font-black animate-pulse text-sm uppercase tracking-widest">বিশ্লেষণ করা হচ্ছে...</p></div> : aiError ? <div className="flex flex-col items-center py-10 text-center gap-5"><AlertCircle className="text-rose-500" size={48} /><p className="text-slate-600 font-bold max-w-sm text-lg">{aiError}</p></div> : <div className="animate-in fade-in slide-in-from-bottom-6 duration-1000"><p className="whitespace-pre-line text-slate-700 font-medium leading-[2] text-lg lg:text-xl">{aiInsight?.text || "আপনার বর্তমান লেনদেন পর্যবেক্ষণ করা হচ্ছে..."}</p></div>}
           </div>
         </div>
       </div>
 
-      {/* Mobile Wallet Modal */}
       {showWalletModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md overflow-y-auto animate-in fade-in duration-300">
           <div className="bg-white p-8 lg:p-10 rounded-[3rem] shadow-2xl border border-slate-100 max-w-md w-full animate-in zoom-in duration-300">
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">মোবাইল ওয়ালেটস</h2>
-              <button onClick={() => setShowWalletModal(false)} className="p-2 hover:bg-slate-50 rounded-2xl transition-colors text-slate-400"><X size={24} /></button>
-            </div>
+            <div className="flex justify-between items-center mb-8"><h2 className="text-2xl font-black text-slate-900 tracking-tight">মোবাইল ওয়ালেটস</h2><button onClick={() => setShowWalletModal(false)} className="p-2 hover:bg-slate-50 rounded-2xl transition-colors text-slate-400"><X size={24} /></button></div>
             <div className="space-y-4">
               {wallets.map((wallet) => (
                 <div key={wallet.id} className="flex items-center justify-between p-6 bg-slate-50 border border-slate-100 rounded-[1.5rem] group hover:bg-white hover:shadow-lg transition-all">
-                   <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-[10px] shadow-sm transform group-hover:rotate-6 transition-transform" style={{ backgroundColor: wallet.color }}>
-                        {wallet.provider.toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="font-black text-slate-800">{wallet.name}</p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Smart Wallet</p>
-                      </div>
-                   </div>
-                   <div className="text-right">
-                      <p className="font-black text-lg text-slate-900">{currency} {wallet.balance.toLocaleString('bn-BD')}</p>
-                      <button 
-                        onClick={() => {
-                          const newBalance = prompt(`নতুন ব্যালেন্স দিন (${wallet.name})`, wallet.balance.toString());
-                          if (newBalance !== null) {
-                            const updatedWallets = wallets.map(w => w.id === wallet.id ? { ...w, balance: Number(newBalance) } : w);
-                            setWallets(updatedWallets);
-                            const userEmail = localStorage.getItem('currentUserEmail') || '';
-                            localStorage.setItem(`wallets_${userEmail}`, JSON.stringify(updatedWallets));
-                            window.dispatchEvent(new Event('storage'));
-                          }
-                        }}
-                        className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-800 transition-colors mt-1"
-                      >
-                        এডিট ব্যালেন্স
-                      </button>
-                   </div>
+                   <div className="flex items-center gap-4"><div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-[10px] shadow-sm transform group-hover:rotate-6 transition-transform" style={{ backgroundColor: wallet.color }}>{wallet.provider.toUpperCase()}</div><div><p className="font-black text-slate-800">{wallet.name}</p><p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Smart Wallet</p></div></div>
+                   <div className="text-right"><p className="font-black text-lg text-slate-900">{currency} {wallet.balance.toLocaleString('bn-BD')}</p></div>
                 </div>
               ))}
             </div>
-            <button 
-              onClick={() => setShowWalletModal(false)}
-              className="w-full mt-8 py-4.5 bg-slate-900 text-white rounded-2xl font-black hover:bg-black transition-all active:scale-95 shadow-xl shadow-slate-200"
-            >
-              বন্ধ করুন
-            </button>
           </div>
         </div>
       )}
 
-      {/* Type Selector Modal */}
       {showTypeSelector && !activeFormType && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100 max-sm w-full animate-in zoom-in duration-300">
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">লেনদেনের ধরন</h2>
-              <button onClick={() => setShowTypeSelector(false)} className="p-2 hover:bg-slate-50 rounded-2xl transition-colors text-slate-400"><X size={24} /></button>
-            </div>
+            <div className="flex justify-between items-center mb-8"><h2 className="text-2xl font-black text-slate-900 tracking-tight">লেনদেনের ধরন</h2><button onClick={() => setShowTypeSelector(false)} className="p-2 hover:bg-slate-50 rounded-2xl transition-colors text-slate-400"><X size={24} /></button></div>
             <div className="grid grid-cols-1 gap-5">
-              <button onClick={() => setActiveFormType('INCOME')} className="flex items-center gap-5 p-6 bg-emerald-50 border border-emerald-100 rounded-[2rem] hover:bg-emerald-100 transition-all group active:scale-95">
-                <div className="w-14 h-14 bg-emerald-500 text-white rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-12 transition-all duration-500 shadow-xl shadow-emerald-100"><TrendingUp size={28} /></div>
-                <div className="text-left"><p className="font-black text-emerald-900 text-xl tracking-tight">আয় (Income)</p></div>
-              </button>
-              <button onClick={() => setActiveFormType('EXPENSE')} className="flex items-center gap-5 p-6 bg-rose-50 border border-rose-100 rounded-[2rem] hover:bg-rose-100 transition-all group active:scale-95">
-                <div className="w-14 h-14 bg-rose-500 text-white rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:-rotate-12 transition-all duration-500 shadow-xl shadow-rose-100"><TrendingDown size={28} /></div>
-                <div className="text-left"><p className="font-black text-rose-900 text-xl tracking-tight">ব্যয় (Expense)</p></div>
-              </button>
+              <button onClick={() => setActiveFormType('INCOME')} className="flex items-center gap-5 p-6 bg-emerald-50 border border-emerald-100 rounded-[2rem] hover:bg-emerald-100 transition-all group active:scale-95"><div className="w-14 h-14 bg-emerald-500 text-white rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-12 transition-all duration-500 shadow-xl shadow-emerald-100"><TrendingUp size={28} /></div><div className="text-left"><p className="font-black text-emerald-900 text-xl tracking-tight">আয় (Income)</p></div></button>
+              <button onClick={() => setActiveFormType('EXPENSE')} className="flex items-center gap-5 p-6 bg-rose-50 border border-rose-100 rounded-[2rem] hover:bg-rose-100 transition-all group active:scale-95"><div className="w-14 h-14 bg-rose-500 text-white rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:-rotate-12 transition-all duration-500 shadow-xl shadow-rose-100"><TrendingDown size={28} /></div><div className="text-left"><p className="font-black text-rose-900 text-xl tracking-tight">ব্যয় (Expense)</p></div></button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Transaction Form Modal */}
       {activeFormType && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-300">
           <div className="w-full max-w-md py-10">
@@ -417,7 +287,9 @@ export const Dashboard: React.FC = () => {
                 const userEmail = localStorage.getItem('currentUserEmail') || '';
                 const savedTxs = localStorage.getItem(`transactions_${userEmail}`);
                 const currentTxs = savedTxs ? JSON.parse(savedTxs) : [];
-                const updated = [newTx, ...currentTxs];
+                // Check if already exists to prevent double push
+                const filtered = currentTxs.filter((t: any) => t.id !== newTx.id);
+                const updated = [newTx, ...filtered];
                 localStorage.setItem(`transactions_${userEmail}`, JSON.stringify(updated));
                 setTransactions(updated);
                 setActiveFormType(null);

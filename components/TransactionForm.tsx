@@ -33,10 +33,12 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ type, initialD
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Unique ID generation improvements
+    const newId = initialData?.id || `tx-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     onSubmit({ 
       ...formData, 
       type, 
-      id: initialData?.id || Math.random().toString(36).substr(2, 9), 
+      id: newId, 
       amount: parseFloat(formData.amount) 
     });
   };

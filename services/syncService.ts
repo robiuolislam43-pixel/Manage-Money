@@ -2,7 +2,7 @@
 import { supabase } from './supabase';
 
 export const syncService = {
-  // ১. সকল ডেটা Supabase থেকে নিয়ে আসা এবং ফ্রন্টএন্ড ফরমেটে রূপান্তর
+  // ১. সকল ডেটা Supabase থেকে নিয়ে আসা
   async pullAllData(userId: string) {
     try {
       const [
@@ -37,7 +37,7 @@ export const syncService = {
     }
   },
 
-  // ২. ক্লাউড থেকে পাওয়া ডেটা LocalStorage-এ সেট করা
+  // ২. ক্লাউড থেকে পাওয়া ডেটা LocalStorage-এ সেট করা (Deduplicated)
   async restoreToLocalStorage(email: string, cloudData: any) {
     if (!cloudData) return;
 
@@ -46,23 +46,31 @@ export const syncService = {
       localStorage.setItem('userCurrency', cloudData.profile.currency || '৳');
     }
     
+    // Transactions deduplication
     if (cloudData.transactions && cloudData.transactions.length > 0) {
-      localStorage.setItem(`transactions_${email}`, JSON.stringify(cloudData.transactions));
+      const existing = JSON.parse(localStorage.getItem(`transactions_${email}`) || '[]');
+      const combined = [...cloudData.transactions, ...existing];
+      // Keep only unique IDs
+      const uniqueTxs = Array.from(new Map(combined.map(item => [item.id, item])).values());
+      localStorage.setItem(`transactions_${email}`, JSON.stringify(uniqueTxs));
     }
     
+    // Loans deduplication
     if (cloudData.loans && cloudData.loans.length > 0) {
-      localStorage.setItem(`loans_${email}`, JSON.stringify(cloudData.loans));
+      const existing = JSON.parse(localStorage.getItem(`loans_${email}`) || '[]');
+      const combined = [...cloudData.loans, ...existing];
+      const uniqueLoans = Array.from(new Map(combined.map(item => [item.id, item])).values());
+      localStorage.setItem(`loans_${email}`, JSON.stringify(uniqueLoans));
     }
     
     if (cloudData.wallets && cloudData.wallets.length > 0) {
       localStorage.setItem(`wallets_${email}`, JSON.stringify(cloudData.wallets));
     }
 
-    // Trigger storage event to update UI
     window.dispatchEvent(new Event('storage'));
   },
 
-  // ৩. প্রোফাইল আপডেট বা তৈরি
+  // ৩. প্রোফাইল আপডেট
   async upsertProfile(userId: string, profileData: any) {
     const dbData = {
       id: userId,
@@ -73,58 +81,46 @@ export const syncService = {
       updated_at: new Date()
     };
 
-    const { error } = await supabase
-      .from('profiles')
-      .upsert(dbData);
-    if (error) console.error("Profile Upsert Error:", error);
+    await supabase.from('profiles').upsert(dbData);
   },
 
   // ৪. ট্রানজেকশন সেভ করা
   async saveTransaction(userId: string, tx: any) {
-    const { error } = await supabase
-      .from('transactions')
-      .upsert({
-        id: tx.id,
-        user_id: userId,
-        amount: tx.amount,
-        category: tx.category,
-        date: tx.date,
-        description: tx.description,
-        type: tx.type
-      });
-    if (error) console.error("Transaction Sync Error:", error);
+    await supabase.from('transactions').upsert({
+      id: tx.id,
+      user_id: userId,
+      amount: tx.amount,
+      category: tx.category,
+      date: tx.date,
+      description: tx.description,
+      type: tx.type
+    });
   },
 
   // ৫. লোন সেভ করা
   async saveLoan(userId: string, loan: any) {
-    const { error } = await supabase
-      .from('loans')
-      .upsert({
-        id: loan.id,
-        user_id: userId,
-        person_name: loan.personName,
-        phone_number: loan.phoneNumber,
-        amount: loan.amount,
-        type: loan.type,
-        due_date: loan.dueDate,
-        status: loan.status
-      });
-    if (error) console.error("Loan Sync Error:", error);
+    await supabase.from('loans').upsert({
+      id: loan.id,
+      user_id: userId,
+      person_name: loan.personName,
+      phone_number: loan.phoneNumber,
+      amount: loan.amount,
+      type: loan.type,
+      due_date: loan.dueDate,
+      status: loan.status
+    });
   },
 
   // ৬. ওয়ালেট সেভ করা
   async saveWallet(userId: string, wallet: any) {
-    const { error } = await supabase
-      .from('wallets')
-      .upsert({
-        id: wallet.id,
-        user_id: userId,
-        name: wallet.name,
-        balance: wallet.balance,
-        color: wallet.color,
-        provider: wallet.provider
-      });
-    if (error) console.error("Wallet Sync Error:", error);
+    await supabase.from('wallets').upsert({
+      id: wallet.id,
+      user_id: userId,
+      name: wallet.name,
+      balance: wallet.balance,
+      color: wallet.color,
+      provider: wallet.provider
+    });
   },
 
   // ৭. সকল ডেটা সিঙ্ক করা
@@ -133,9 +129,7 @@ export const syncService = {
       let targetId = userId;
       if (!userId.includes('-')) { 
          const { data: sessionData } = await supabase.auth.getSession();
-         if (sessionData.session?.user.id) {
-           targetId = sessionData.session.user.id;
-         }
+         if (sessionData.session?.user.id) targetId = sessionData.session.user.id;
       }
 
       const syncs = [
@@ -145,13 +139,7 @@ export const syncService = {
       ];
       await Promise.all(syncs);
     } catch (error) {
-      console.error("Sync All Data Error:", error);
-    }
-  },
-
-  async requestPersistence() {
-    if (navigator.storage && navigator.storage.persist) {
-      await navigator.storage.persist();
+      console.error("Sync Error:", error);
     }
   }
 };
