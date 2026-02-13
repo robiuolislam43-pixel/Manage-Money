@@ -1,8 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Phone, CheckCircle2, Sparkles, ArrowRight, Loader2 } from 'lucide-react';
-import { UI_LABELS } from '../constants';
+import { User, Phone, Sparkles, ArrowRight, Loader2 } from 'lucide-react';
 import { syncService } from '../services/syncService';
 import { supabase } from '../services/supabase';
 
@@ -10,32 +9,46 @@ export const OnboardingPage: React.FC = () => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
   const navigate = useNavigate();
   const userEmail = localStorage.getItem('currentUserEmail') || '';
 
   useEffect(() => {
-    if (!userEmail) navigate('/login');
+    if (!userEmail) {
+      navigate('/login');
+      return;
+    }
     
-    const checkProfile = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const cloudData = await syncService.pullAllData(session.user.id);
-        if (cloudData?.profile?.isProfileComplete) {
-          await syncService.restoreToLocalStorage(userEmail, cloudData);
-          navigate('/');
+    const checkExistingProfile = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          // Double check cloud data in case the login flow missed it
+          const cloudData = await syncService.pullAllData(session.user.id);
+          if (cloudData?.profile?.isProfileComplete) {
+            await syncService.restoreToLocalStorage(userEmail, cloudData);
+            navigate('/');
+            return;
+          }
         }
+      } catch (err) {
+        console.error("Onboarding check error:", err);
+      } finally {
+        setIsChecking(false);
       }
     };
-    checkProfile();
+    
+    checkExistingProfile();
   }, [userEmail, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    if (!name.trim() || !phone.trim()) return;
     
+    setIsLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("No session");
+      if (!session) throw new Error("সেশন পাওয়া যায়নি। দয়া করে আবার লগইন করুন।");
 
       const profileData = {
         name: name.trim(),
@@ -45,22 +58,31 @@ export const OnboardingPage: React.FC = () => {
         isProfileComplete: true
       };
       
+      // Save to Cloud first
+      await syncService.upsertProfile(session.user.id, profileData);
+      
       // Save locally
       localStorage.setItem(`profile_${userEmail}`, JSON.stringify(profileData));
       localStorage.setItem('userCurrency', '৳');
       
-      // Save to Cloud
-      await syncService.upsertProfile(session.user.id, profileData);
-      
       window.dispatchEvent(new Event('storage'));
       navigate('/');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("তথ্য সেভ করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
+      alert(err.message || "তথ্য সেভ করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (isChecking) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-6 font-['Hind_Siliguri']">
+        <Loader2 size={48} className="text-indigo-600 animate-spin mb-4" />
+        <p className="text-slate-500 font-bold">প্রোফাইল যাচাই করা হচ্ছে...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 font-['Hind_Siliguri']">

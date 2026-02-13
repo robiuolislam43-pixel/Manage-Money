@@ -1,10 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UI_LABELS } from '../constants';
 import { Logo } from '../components/Logo';
 import { 
-  Rocket, 
   ArrowRight, 
   AlertCircle, 
   ShieldCheck, 
@@ -25,6 +23,7 @@ interface AuthPageProps {
 
 type AuthMode = 'LOGIN' | 'SIGNUP';
 
+// Use React.FC which requires React to be imported
 export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const [authMode, setAuthMode] = useState<AuthMode>('LOGIN');
   const [email, setEmail] = useState('');
@@ -37,10 +36,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const timer = setTimeout(() => setShowIntro(false), 3500);
+    const timer = setTimeout(() => setShowIntro(false), 2500);
     return () => clearTimeout(timer);
   }, []);
 
+  // Use React.FormEvent which requires React to be imported
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -65,7 +65,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
         }
 
         if (data.user) {
-          handleSuccessfulAuth(data.user);
+          await handleSuccessfulAuth(data.user);
         }
       } else {
         setStatusText('একাউন্ট তৈরি হচ্ছে...');
@@ -81,11 +81,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
           throw signUpError;
         }
 
-        if (data.user && !data.session) {
-          setSuccessMsg('আপনার একাউন্ট তৈরি হয়েছে। দয়া করে ইমেইল ভেরিফাই করুন (যদি প্রয়োজন হয়)।');
-          setLoading(false);
-        } else if (data.user && data.session) {
-          handleSuccessfulAuth(data.user);
+        if (data.user) {
+          if (!data.session) {
+            setSuccessMsg('আপনার একাউন্ট তৈরি হয়েছে। দয়া করে ইমেইল ভেরিফাই করুন (যদি প্রয়োজন হয়)।');
+            setLoading(false);
+          } else {
+            await handleSuccessfulAuth(data.user);
+          }
         }
       }
     } catch (err: any) {
@@ -99,17 +101,28 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
     localStorage.setItem('currentUserEmail', userEmail);
     
     setStatusText('ডেটা সিঙ্ক হচ্ছে...');
-    const cloudData = await syncService.pullAllData(user.id);
-    
-    if (cloudData && cloudData.profile) {
-      await syncService.restoreToLocalStorage(userEmail, cloudData);
-      onLogin();
-      navigate(cloudData.profile.isProfileComplete ? '/' : '/onboarding');
-    } else {
+    try {
+      // Fetch all data from cloud to see if profile exists
+      const cloudData = await syncService.pullAllData(user.id);
+      
+      if (cloudData && cloudData.profile && cloudData.profile.isProfileComplete) {
+        // Profile already exists, restore it locally
+        await syncService.restoreToLocalStorage(userEmail, cloudData);
+        // Navigate FIRST, then call onLogin to avoid App.tsx Navigate race
+        onLogin();
+        navigate('/');
+      } else {
+        // No profile found or incomplete, go to onboarding
+        onLogin();
+        navigate('/onboarding');
+      }
+    } catch (err) {
+      console.error("Auth sync error:", err);
       onLogin();
       navigate('/onboarding');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   if (showIntro) {
@@ -149,16 +162,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
             <p className="text-slate-500 font-bold mt-2 text-sm">আপনার আর্থিক হিসাবের নিরাপদ ঠিকানা</p>
           </div>
 
-          {/* Mode Switcher */}
+          {/* Explicit Tabs */}
           <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-8">
             <button 
-              onClick={() => { setAuthMode('LOGIN'); setError(null); }}
+              onClick={() => { setAuthMode('LOGIN'); setError(null); setSuccessMsg(null); }}
               className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm transition-all ${authMode === 'LOGIN' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
               <LogIn size={18} /> লগইন
             </button>
             <button 
-              onClick={() => { setAuthMode('SIGNUP'); setError(null); }}
+              onClick={() => { setAuthMode('SIGNUP'); setError(null); setSuccessMsg(null); }}
               className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-sm transition-all ${authMode === 'SIGNUP' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
               <UserPlus size={18} /> নতুন একাউন্ট
