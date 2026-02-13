@@ -25,7 +25,7 @@ export const OnboardingPage: React.FC = () => {
         const localData = localStorage.getItem(`profile_${userEmail}`);
         if (localData) {
           const p = JSON.parse(localData);
-          if (p.isProfileComplete) {
+          if (p.isProfileComplete || p.is_profile_complete) {
             navigate('/', { replace: true });
             return;
           }
@@ -35,7 +35,8 @@ export const OnboardingPage: React.FC = () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
           const cloudData = await syncService.pullAllData(session.user.id);
-          if (cloudData?.profile?.isProfileComplete) {
+          if (cloudData && cloudData.profile && (cloudData.profile.isProfileComplete || cloudData.profile.is_profile_complete)) {
+            // Restore it locally so we don't land here again
             await syncService.restoreToLocalStorage(userEmail, cloudData);
             navigate('/', { replace: true });
             return;
@@ -74,6 +75,9 @@ export const OnboardingPage: React.FC = () => {
       // Save locally
       localStorage.setItem(`profile_${userEmail}`, JSON.stringify(profileData));
       localStorage.setItem('userCurrency', '৳');
+      
+      // Small delay to ensure DB sync
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       window.dispatchEvent(new Event('storage'));
       navigate('/', { replace: true });

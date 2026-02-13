@@ -5,18 +5,20 @@ import { UI_LABELS } from '../constants';
 import { 
   TrendingUp, TrendingDown, Wallet as WalletIcon, Plus, User, X, 
   ArrowUpRight, ArrowDownLeft, Smartphone, ChevronRight,
-  TrendingUp as UpIcon, BrainCircuit, Loader2, RefreshCw, AlertCircle, ExternalLink, Sparkles
+  TrendingUp as UpIcon, BrainCircuit, Loader2, RefreshCw, AlertCircle, ExternalLink, Sparkles, BellRing, CalendarClock
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Transaction, Loan, TransactionType, Wallet, AIInsight } from '../types';
 import { TransactionForm } from '../components/TransactionForm';
 import { getFinancialInsights } from '../services/geminiService';
 import { syncService } from '../services/syncService';
+import { useNavigate } from 'react-router-dom';
 
 export const Dashboard: React.FC = () => {
   const [profilePic, setProfilePic] = useState<string | null>(null);
   const [userName, setUserName] = useState('ইউজার');
   const [currency, setCurrency] = useState('৳');
+  const navigate = useNavigate();
   
   const [showTypeSelector, setShowTypeSelector] = useState(false);
   const [activeFormType, setActiveFormType] = useState<TransactionType | null>(null);
@@ -50,15 +52,12 @@ export const Dashboard: React.FC = () => {
     const loanKey = `loans_${userEmail}`;
     const walletKey = `wallets_${userEmail}`;
 
-    // Load and deduplicate transactions
     const savedTxs = localStorage.getItem(txKey);
     let txs: Transaction[] = savedTxs ? JSON.parse(savedTxs) : [];
-    // DEDUPLICATION: Ensure no duplicate IDs
     txs = Array.from(new Map(txs.map(item => [item.id, item])).values());
     txs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setTransactions(txs);
 
-    // Load and deduplicate loans
     const savedLoans = localStorage.getItem(loanKey);
     let lnList: Loan[] = savedLoans ? JSON.parse(savedLoans) : [];
     lnList = Array.from(new Map(lnList.map(item => [item.id, item])).values());
@@ -73,7 +72,6 @@ export const Dashboard: React.FC = () => {
     ];
     setWallets(walletList);
 
-    // Sync back to Supabase only if needed
     syncService.syncAllData(userEmail, { transactions: txs, loans: lnList, wallets: walletList });
   }, []);
 
@@ -119,6 +117,12 @@ export const Dashboard: React.FC = () => {
     };
   }, [transactions, loans, triggerAI]);
 
+  // Check for due today loans
+  const dueTodayLoans = useMemo(() => {
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    return loans.filter(l => l.status === 'PENDING' && l.dueDate === todayStr);
+  }, [loans]);
+
   const totalIncome = transactions
     .filter(t => t.type === 'INCOME')
     .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
@@ -139,6 +143,39 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
+      {/* Due Today Alert Section */}
+      {dueTodayLoans.length > 0 && (
+        <div className="bg-gradient-to-r from-rose-600 to-rose-500 rounded-[2rem] p-6 lg:p-8 text-white shadow-2xl shadow-rose-100 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden group">
+          <div className="absolute right-0 top-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
+          <div className="flex items-center gap-6 relative z-10">
+            <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center animate-bounce">
+              <CalendarClock size={32} />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black tracking-tight">আজকের জরুরি তারিখ!</h2>
+              <p className="text-white/80 font-bold mt-1">আজ আপনার {dueTodayLoans.length}টি লোন পরিশোধ বা আদায়ের কথা রয়েছে।</p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 relative z-10 w-full md:w-auto">
+            {dueTodayLoans.slice(0, 2).map(loan => (
+              <div key={loan.id} className="bg-white/10 backdrop-blur-sm border border-white/20 px-5 py-3 rounded-2xl flex items-center justify-between gap-4">
+                <span className="font-black text-sm">{loan.personName}</span>
+                <span className="font-black text-lg">{currency} {loan.amount.toLocaleString('bn-BD')}</span>
+                <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${loan.type === 'OWE_ME' ? 'bg-emerald-400 text-emerald-900' : 'bg-amber-400 text-amber-900'}`}>
+                  {loan.type === 'OWE_ME' ? 'পাওনা' : 'দেনা'}
+                </span>
+              </div>
+            ))}
+            <button 
+              onClick={() => navigate('/loans')}
+              className="mt-2 w-full bg-white text-rose-600 font-black py-3 rounded-2xl hover:bg-slate-50 transition-all shadow-xl flex items-center justify-center gap-2 group-hover:scale-105 active:scale-95"
+            >
+              সবগুলো দেখুন <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center gap-5">
           <div className="w-20 h-20 rounded-[2rem] bg-indigo-600 flex items-center justify-center overflow-hidden border-4 border-white shadow-2xl shadow-indigo-100 shrink-0 transform hover:scale-105 transition-transform duration-500">
@@ -232,6 +269,7 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* AI Assistant Card */}
       <div className="relative group pt-8">
         <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-[3rem] blur-xl opacity-20 group-hover:opacity-30 transition duration-1000"></div>
         <div className="relative bg-white/90 backdrop-blur-2xl p-8 lg:p-12 rounded-[3rem] border border-white shadow-2xl">
@@ -287,7 +325,6 @@ export const Dashboard: React.FC = () => {
                 const userEmail = localStorage.getItem('currentUserEmail') || '';
                 const savedTxs = localStorage.getItem(`transactions_${userEmail}`);
                 const currentTxs = savedTxs ? JSON.parse(savedTxs) : [];
-                // Check if already exists to prevent double push
                 const filtered = currentTxs.filter((t: any) => t.id !== newTx.id);
                 const updated = [newTx, ...filtered];
                 localStorage.setItem(`transactions_${userEmail}`, JSON.stringify(updated));

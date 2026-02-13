@@ -98,28 +98,29 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
     const userEmail = user.email!;
     localStorage.setItem('currentUserEmail', userEmail);
     
-    setStatusText('প্রোফাইল যাচাই করা হচ্ছে...');
+    setStatusText('প্রোফাইল সিঙ্ক হচ্ছে...');
     try {
-      // Fetch all data from cloud to see if profile exists
+      // Fetch all data from cloud
       const cloudData = await syncService.pullAllData(user.id);
       
-      if (cloudData && cloudData.profile && cloudData.profile.isProfileComplete) {
-        // Profile already exists in DB, restore it locally and go to dashboard
+      if (cloudData && cloudData.profile && (cloudData.profile.isProfileComplete || cloudData.profile.is_profile_complete)) {
+        // Ensure mapping is correct for local storage
+        const restoredProfile = {
+          ...cloudData.profile,
+          isProfileComplete: true
+        };
+        cloudData.profile = restoredProfile;
+        
+        // Restore to LocalStorage
         await syncService.restoreToLocalStorage(userEmail, cloudData);
+        
+        // Wait a small moment for LocalStorage to settle
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         onLogin();
         navigate('/', { replace: true });
       } else {
-        // No profile found, check local storage as backup
-        const localProfile = localStorage.getItem(`profile_${userEmail}`);
-        if (localProfile) {
-          const p = JSON.parse(localProfile);
-          if (p.isProfileComplete) {
-            onLogin();
-            navigate('/', { replace: true });
-            return;
-          }
-        }
-        // Truly a new user or missing profile, go to onboarding
+        // No complete profile found in cloud
         onLogin();
         navigate('/onboarding', { replace: true });
       }

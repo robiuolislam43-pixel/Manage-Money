@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loan, Transaction } from '../types';
 import { UI_LABELS } from '../constants';
-import { Plus, User, Calendar, CheckCircle, Clock, Trash2, Search, FileDown, Loader2, Phone, Edit3, CheckCircle2, AlertCircle, ShieldCheck, DownloadCloud, Landmark, Shield } from 'lucide-react';
+import { Plus, User, Calendar, CheckCircle, Clock, Trash2, Search, FileDown, Loader2, Phone, Edit3, CheckCircle2, AlertCircle, ShieldCheck, DownloadCloud, Landmark, Shield, Check } from 'lucide-react';
 import { LoanForm } from '../components/LoanForm';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -124,7 +124,7 @@ export const LoansPage: React.FC = () => {
         logging: false,
         backgroundColor: '#ffffff',
         width: element.offsetWidth,
-        height: element.scrollHeight, // Fix for content clipping
+        height: element.scrollHeight,
         windowHeight: element.scrollHeight,
         y: 0,
         scrollX: 0,
@@ -188,22 +188,47 @@ export const LoansPage: React.FC = () => {
         <h3 className="text-lg font-black text-slate-800 mb-6 px-2">ঋণ ও পাওনার তালিকা</h3>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {loans.length > 0 ? loans.map((loan) => (
-            <div key={loan.id} className={`bg-slate-50 p-6 rounded-[1.5rem] border border-slate-100 flex items-center justify-between group hover:shadow-md transition-all ${loan.status === 'PAID' ? 'opacity-60' : ''}`}>
+            <div key={loan.id} className={`bg-white p-6 rounded-[2rem] border border-slate-100 flex items-center justify-between group transition-all hover:shadow-xl hover:scale-[1.01] ${loan.status === 'PAID' ? 'bg-slate-50/50' : ''}`}>
                <div className="flex items-center gap-5">
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${loan.type === 'OWE_ME' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}><User size={24} /></div>
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm ${loan.type === 'OWE_ME' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'} ${loan.status === 'PAID' ? 'opacity-50' : ''}`}>
+                    <User size={24} />
+                  </div>
                   <div className="cursor-pointer" onClick={() => { setEditingLoan(loan); setShowForm(true); }}>
-                    <h4 className={`font-black text-lg ${loan.status === 'PAID' ? 'line-through text-slate-400' : 'text-slate-900'}`}>{loan.personName}</h4>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{loan.dueDate || 'তারিখ নেই'}</p>
-                    {loan.phoneNumber && <p className="text-[10px] text-indigo-500 font-bold mt-1 flex items-center gap-1"><Phone size={10} /> {loan.phoneNumber}</p>}
+                    <h4 className={`font-black text-lg tracking-tight ${loan.status === 'PAID' ? 'line-through text-slate-400' : 'text-slate-900'}`}>{loan.personName}</h4>
+                    <div className="flex items-center gap-3 mt-1">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest flex items-center gap-1">
+                        <Calendar size={12} /> {loan.dueDate || 'তারিখ নেই'}
+                      </p>
+                      {loan.phoneNumber && <p className="text-[10px] text-indigo-500 font-bold flex items-center gap-1"><Phone size={10} /> {loan.phoneNumber}</p>}
+                    </div>
                   </div>
                </div>
-               <div className="flex flex-col items-end gap-2">
-                  <p className={`text-xl font-black ${loan.type === 'OWE_ME' ? 'text-emerald-600' : 'text-rose-600'}`}>{currency} {loan.amount.toLocaleString('bn-BD')}</p>
-                  <div className="flex gap-2">
-                     <button onClick={() => toggleStatus(loan.id)} className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all border ${loan.status === 'PAID' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-900 hover:text-white'}`}>
-                       {loan.status === 'PAID' ? 'PAID' : 'MARK PAID'}
-                     </button>
-                     <button onClick={() => deleteLoan(loan.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors"><Trash2 size={18} /></button>
+               <div className="flex flex-col items-end gap-3">
+                  <p className={`text-xl font-black tracking-tight ${loan.status === 'PAID' ? 'text-slate-400' : (loan.type === 'OWE_ME' ? 'text-emerald-600' : 'text-rose-600')}`}>
+                    {currency} {loan.amount.toLocaleString('bn-BD')}
+                  </p>
+                  <div className="flex items-center gap-2">
+                     {loan.status === 'PAID' ? (
+                       <div className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-full border border-indigo-100">
+                         <Check size={14} strokeWidth={3} />
+                         <span className="text-[10px] font-black uppercase tracking-widest">পরিশোধিত</span>
+                       </div>
+                     ) : (
+                       <button 
+                         onClick={() => toggleStatus(loan.id)} 
+                         className={`px-5 py-2 rounded-xl text-[10px] font-black transition-all shadow-sm border ${
+                           loan.type === 'OWE_ME' 
+                           ? 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700' 
+                           : 'bg-rose-600 border-rose-600 text-white hover:bg-rose-700'
+                         }`}
+                       >
+                         পরিশোধ করুন
+                       </button>
+                     )}
+                     <div className="flex gap-1 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                       <button onClick={() => { setEditingLoan(loan); setShowForm(true); }} className="p-2 text-slate-300 hover:text-indigo-600 transition-colors"><Edit3 size={16} /></button>
+                       <button onClick={() => deleteLoan(loan.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
+                     </div>
                   </div>
                </div>
             </div>
