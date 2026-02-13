@@ -21,13 +21,23 @@ export const OnboardingPage: React.FC = () => {
     
     const checkExistingProfile = async () => {
       try {
+        // 1. First check local storage (fastest)
+        const localData = localStorage.getItem(`profile_${userEmail}`);
+        if (localData) {
+          const p = JSON.parse(localData);
+          if (p.isProfileComplete) {
+            navigate('/', { replace: true });
+            return;
+          }
+        }
+
+        // 2. Check Cloud storage if local fails
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
-          // Double check cloud data in case the login flow missed it
           const cloudData = await syncService.pullAllData(session.user.id);
           if (cloudData?.profile?.isProfileComplete) {
             await syncService.restoreToLocalStorage(userEmail, cloudData);
-            navigate('/');
+            navigate('/', { replace: true });
             return;
           }
         }
@@ -66,7 +76,7 @@ export const OnboardingPage: React.FC = () => {
       localStorage.setItem('userCurrency', '৳');
       
       window.dispatchEvent(new Event('storage'));
-      navigate('/');
+      navigate('/', { replace: true });
     } catch (err: any) {
       console.error(err);
       alert(err.message || "তথ্য সেভ করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");

@@ -23,7 +23,6 @@ interface AuthPageProps {
 
 type AuthMode = 'LOGIN' | 'SIGNUP';
 
-// Use React.FC which requires React to be imported
 export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const [authMode, setAuthMode] = useState<AuthMode>('LOGIN');
   const [email, setEmail] = useState('');
@@ -40,7 +39,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Use React.FormEvent which requires React to be imported
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -76,14 +74,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
         if (signUpError) {
           if (signUpError.message.includes('User already registered')) {
-            throw new Error('এই ইমেইলটি দিয়ে অলরেডি একাউন্ট খোলা আছে। দয়া করে লগইন করুন।');
+            throw new Error('এই ইমেইলটি দিয়ে অলরেডি একাউন্ট খোলা আছে। দয়া করে লগইন ট্যাব ব্যবহার করুন।');
           }
           throw signUpError;
         }
 
         if (data.user) {
           if (!data.session) {
-            setSuccessMsg('আপনার একাউন্ট তৈরি হয়েছে। দয়া করে ইমেইল ভেরিফাই করুন (যদি প্রয়োজন হয়)।');
+            setSuccessMsg('আপনার একাউন্ট তৈরি হয়েছে। দয়া করে ইমেইল ইনবক্স চেক করুন।');
             setLoading(false);
           } else {
             await handleSuccessfulAuth(data.user);
@@ -100,26 +98,35 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
     const userEmail = user.email!;
     localStorage.setItem('currentUserEmail', userEmail);
     
-    setStatusText('ডেটা সিঙ্ক হচ্ছে...');
+    setStatusText('প্রোফাইল যাচাই করা হচ্ছে...');
     try {
       // Fetch all data from cloud to see if profile exists
       const cloudData = await syncService.pullAllData(user.id);
       
       if (cloudData && cloudData.profile && cloudData.profile.isProfileComplete) {
-        // Profile already exists, restore it locally
+        // Profile already exists in DB, restore it locally and go to dashboard
         await syncService.restoreToLocalStorage(userEmail, cloudData);
-        // Navigate FIRST, then call onLogin to avoid App.tsx Navigate race
         onLogin();
-        navigate('/');
+        navigate('/', { replace: true });
       } else {
-        // No profile found or incomplete, go to onboarding
+        // No profile found, check local storage as backup
+        const localProfile = localStorage.getItem(`profile_${userEmail}`);
+        if (localProfile) {
+          const p = JSON.parse(localProfile);
+          if (p.isProfileComplete) {
+            onLogin();
+            navigate('/', { replace: true });
+            return;
+          }
+        }
+        // Truly a new user or missing profile, go to onboarding
         onLogin();
-        navigate('/onboarding');
+        navigate('/onboarding', { replace: true });
       }
     } catch (err) {
       console.error("Auth sync error:", err);
       onLogin();
-      navigate('/onboarding');
+      navigate('/onboarding', { replace: true });
     } finally {
       setLoading(false);
     }
@@ -162,7 +169,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
             <p className="text-slate-500 font-bold mt-2 text-sm">আপনার আর্থিক হিসাবের নিরাপদ ঠিকানা</p>
           </div>
 
-          {/* Explicit Tabs */}
           <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-8">
             <button 
               onClick={() => { setAuthMode('LOGIN'); setError(null); setSuccessMsg(null); }}
